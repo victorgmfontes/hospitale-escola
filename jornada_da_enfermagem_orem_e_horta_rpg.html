@@ -1,0 +1,3079 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Jornada da Enfermagem: Orem & Horta RPG</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #0b1120;
+      font-family: 'Inter', sans-serif;
+    }
+    .font-pixel {
+      font-family: 'Press Start 2P', monospace;
+    }
+    #gameCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      image-rendering: pixelated;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: #e2e8f0;
+      border-radius: 8px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #64748b;
+      border-radius: 8px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    @keyframes floatPrompt {
+      0%, 100% { transform: translate(-50%, 0px); }
+      50% { transform: translate(-50%, -5px); }
+    }
+    .animate-prompt {
+      animation: floatPrompt 1.8s ease-in-out infinite;
+    }
+    .dpad-btn:active {
+      transform: scale(0.92);
+      background-color: rgba(255, 255, 255, 0.35);
+    }
+    /* Estilo realista de prancheta clínica */
+    .clipboard-paper {
+      background-color: #fffdf7;
+      background-image: linear-gradient(#e2e8f0 1px, transparent 1px);
+      background-size: 100% 28px;
+    }
+  </style>
+</head>
+<body class="relative text-slate-800">
+
+  <!-- CANVAS DO JOGO -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- EFEITO DE TRANSIÇÃO DE PORTA -->
+  <div id="doorFade" class="pointer-events-none fixed inset-0 z-30 bg-slate-950 opacity-0 transition-opacity duration-200"></div>
+
+  <!-- HUD SUPERIOR -->
+  <div id="hud" class="hidden fixed top-0 left-0 right-0 z-20 p-2.5 md:p-4 pointer-events-none flex flex-wrap items-start justify-between gap-2">
+    <!-- Painel Esquerdo: Setor, Leitos e Missões -->
+    <div class="pointer-events-auto bg-slate-900/95 backdrop-blur-md text-white border border-slate-700/90 rounded-2xl px-3.5 py-2.5 shadow-2xl flex flex-wrap items-center gap-3 md:gap-4">
+      <div class="flex items-center gap-2.5">
+        <div id="hudSectorIcon" class="w-9 h-9 rounded-xl bg-teal-500/20 border border-teal-400/50 flex items-center justify-center text-lg">
+          🏥
+        </div>
+        <div>
+          <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Setor Atual</div>
+          <div id="hudSectorName" class="text-xs md:text-sm font-extrabold text-teal-300">Recepção & Espera</div>
+        </div>
+      </div>
+
+      <div class="h-8 w-px bg-slate-700 hidden sm:block"></div>
+
+      <!-- Progresso Geral dos Leitos (25 Leitos: 10 Orem + 10 Horta + 5 UTI) -->
+      <div>
+        <div class="flex items-center justify-between gap-2 text-[11px] mb-1">
+          <span class="text-slate-300 font-semibold">Leitos Avaliados</span>
+          <span id="hudBedsText" class="font-extrabold text-amber-400">0/25</span>
+        </div>
+        <div class="w-24 md:w-32 h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+          <div id="hudBedsBar" class="h-full bg-gradient-to-r from-emerald-400 to-sky-400 transition-all duration-300" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <div class="h-8 w-px bg-slate-700 hidden md:block"></div>
+
+      <!-- Status das Missões Secundárias -->
+      <div class="hidden md:flex items-center gap-2 text-xs">
+        <div id="hudLittmannBadge" class="px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 flex items-center gap-1.5" title="Missão Secundária 1: Estetoscópio Littmann">
+          <span>🩺</span>
+          <span id="hudLittmannText">Littmann: 0/3</span>
+        </div>
+        <div id="hudRxBadge" class="px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 flex items-center gap-1.5" title="Missão Secundária 2: Prescrições de Enfermagem">
+          <span>✍️</span>
+          <span id="hudRxText">Prescrições: 0/3</span>
+        </div>
+      </div>
+
+      <div class="h-8 w-px bg-slate-700 hidden lg:block"></div>
+
+      <div class="hidden lg:flex flex-col items-end">
+        <span class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Pontuação</span>
+        <span id="hudScore" class="text-sm font-black text-sky-400">0 pts</span>
+      </div>
+    </div>
+
+    <!-- Painel Direito: Minha Prancheta & Som -->
+    <div class="pointer-events-auto flex items-center gap-2">
+      <button id="btnAudio" onclick="toggleAudio()" title="Alternar Efeitos Sonoros" class="bg-slate-900/95 hover:bg-slate-800 text-white border border-slate-700 rounded-xl p-2.5 shadow-xl transition text-sm">
+        🔊
+      </button>
+      <button onclick="openClipboardModal('roteiro')" class="bg-amber-600 hover:bg-amber-500 text-white border border-amber-400/60 rounded-xl px-3.5 py-2.5 text-xs md:text-sm font-extrabold shadow-xl flex items-center gap-2 transition transform active:scale-95">
+        <span>📋</span>
+        <span>Minha Prancheta</span>
+        <span class="hidden sm:inline text-[10px] bg-black/25 px-1.5 py-0.5 rounded font-mono">P</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- PROMPT DE INTERAÇÃO FLUTUANTE -->
+  <div id="interactPrompt" class="hidden fixed bottom-32 md:bottom-8 left-1/2 z-20 pointer-events-none animate-prompt">
+    <div class="bg-slate-900/95 text-white border-2 border-emerald-400 px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2.5 text-xs md:text-sm font-bold whitespace-nowrap">
+      <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+      <span id="interactPromptText">Pressione ESPAÇO / E para interagir</span>
+    </div>
+  </div>
+
+  <!-- CONTROLES TOUCH / MOBILE -->
+  <div id="mobileControls" class="hidden fixed bottom-4 left-4 right-4 z-20 flex items-end justify-between pointer-events-none md:opacity-75">
+    <div class="pointer-events-auto grid grid-cols-3 gap-1.5 w-36 h-36">
+      <div></div>
+      <button id="btnUp" class="dpad-btn bg-slate-900/85 border border-slate-600 text-white rounded-xl flex items-center justify-center text-lg shadow-lg">▲</button>
+      <div></div>
+      <button id="btnLeft" class="dpad-btn bg-slate-900/85 border border-slate-600 text-white rounded-xl flex items-center justify-center text-lg shadow-lg">◀</button>
+      <div class="bg-slate-900/40 rounded-xl border border-slate-700/50"></div>
+      <button id="btnRight" class="dpad-btn bg-slate-900/85 border border-slate-600 text-white rounded-xl flex items-center justify-center text-lg shadow-lg">▶</button>
+      <div></div>
+      <button id="btnDown" class="dpad-btn bg-slate-900/85 border border-slate-600 text-white rounded-xl flex items-center justify-center text-lg shadow-lg">▼</button>
+      <div></div>
+    </div>
+
+    <div class="pointer-events-auto flex flex-col items-end gap-2">
+      <button onclick="triggerInteraction()" class="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 active:scale-95 text-white font-extrabold text-[11px] tracking-wide border-4 border-emerald-200/40 shadow-2xl flex flex-col items-center justify-center gap-1">
+        <span class="text-xl">🩺</span>
+        <span>INTERAGIR</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- TELA INICIAL -->
+  <div id="startScreen" class="fixed inset-0 z-40 bg-slate-950/92 backdrop-blur-md flex items-center justify-center p-3 md:p-6 overflow-y-auto">
+    <div class="max-w-3xl w-full bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto">
+      <div class="bg-gradient-to-r from-slate-900 via-teal-900 to-sky-900 p-6 md:p-8 text-white relative overflow-hidden">
+        <div class="absolute -right-6 -bottom-8 text-white/10 text-9xl font-black select-none">✚</div>
+        <div class="inline-flex items-center gap-2 bg-emerald-500/20 border border-emerald-400/40 px-3 py-1 rounded-full text-xs font-bold tracking-wider uppercase text-emerald-300 mb-3">
+          <span>🏥 Simulação Clínica RPG 2D • Teorias de Enfermagem</span>
+        </div>
+        <h1 class="text-2xl md:text-3xl font-black tracking-tight leading-tight">
+          Hospital Universitário: Dorothea Orem & Wanda Horta
+        </h1>
+        <p class="mt-2 text-slate-200 text-sm md:text-base leading-relaxed">
+          Explore os setores hospitalares por portas interativas, atenda pacientes sorteados dinamicamente em 25 leitos (Enfermarias e UTI com Ventilação Mecânica), conquiste seu <strong>Estetoscópio Littmann</strong> e apresente o seminário completo à <strong>Coordenação de Enfermagem</strong>.
+        </p>
+      </div>
+
+      <div class="p-6 md:p-8 space-y-5">
+        <div class="grid md:grid-cols-2 gap-4">
+          <!-- Escolha do Avatar -->
+          <div>
+            <label class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-2">
+              1. Estagiário(a) de Enfermagem
+            </label>
+            <div class="grid grid-cols-2 gap-2.5">
+              <button type="button" id="cardAvatarF" onclick="selectAvatar('F')" class="border-2 border-teal-600 bg-teal-50 rounded-2xl p-3 flex items-center gap-2.5 text-left transition">
+                <span class="text-2xl">👩‍⚕️</span>
+                <div>
+                  <div class="font-bold text-slate-900 text-sm">Acadêmica</div>
+                  <div class="text-[11px] text-slate-500">Jaleco Branco</div>
+                </div>
+              </button>
+              <button type="button" id="cardAvatarM" onclick="selectAvatar('M')" class="border-2 border-slate-200 hover:border-slate-300 bg-white rounded-2xl p-3 flex items-center gap-2.5 text-left transition">
+                <span class="text-2xl">👨‍⚕️</span>
+                <div>
+                  <div class="font-bold text-slate-900 text-sm">Acadêmico</div>
+                  <div class="text-[11px] text-slate-500">Jaleco Branco</div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <!-- Nome -->
+          <div>
+            <label for="inputPlayerName" class="block text-xs font-extrabold uppercase tracking-wider text-slate-500 mb-2">
+              2. Identificação no Crachá
+            </label>
+            <input id="inputPlayerName" type="text" maxlength="28" placeholder="Ex: Estagiário(a) Gabriel / Camila" class="w-full px-4 py-3 rounded-2xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-800 font-semibold text-sm" />
+          </div>
+        </div>
+
+        <!-- Setores e Missões -->
+        <div class="grid sm:grid-cols-2 gap-3 text-xs">
+          <div class="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-1.5">
+            <div class="font-extrabold text-slate-800 flex items-center gap-1.5">
+              <span>🚪</span> Setores Interligados por Portas:
+            </div>
+            <ul class="space-y-1 text-slate-600">
+              <li>• <strong>Recepção & Sala de Espera:</strong> Recepcionista e acompanhantes.</li>
+              <li>• <strong>Ala Dorothea Orem (10 Leitos):</strong> Autocuidado e Sistemas.</li>
+              <li>• <strong>Ala Wanda Horta (10 Leitos):</strong> NHB e Processo em 6 Etapas.</li>
+              <li>• <strong>UTI (5 Leitos):</strong> Alta complexidade + <strong>Ventilação Mecânica</strong>.</li>
+              <li>• <strong>Sala da Coordenação:</strong> Avaliação Final do Seminário.</li>
+            </ul>
+          </div>
+
+          <div class="bg-amber-50/70 p-3.5 rounded-2xl border border-amber-200 space-y-1.5">
+            <div class="font-extrabold text-amber-900 flex items-center gap-1.5">
+              <span>⭐</span> Missões Secundárias & Roteiro:
+            </div>
+            <ul class="space-y-1 text-amber-950/85">
+              <li>• <strong>Missão Littmann:</strong> Complete a triagem semiológica para ganhar e equipar o <strong>Estetoscópio Littmann</strong> no pescoço!</li>
+              <li>• <strong>Prescrição de Enfermagem:</strong> Elabore prescrições clínicas nos leitos selecionados.</li>
+              <li>• <strong>Minha Prancheta (Tecla P):</strong> Roteiro completo com os <strong>7 tópicos obrigatórios</strong> + fontes ABNT.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+          <div class="text-xs text-slate-500 flex flex-wrap items-center gap-2">
+            <span class="px-2 py-1 bg-slate-100 border border-slate-300 rounded font-mono font-bold text-slate-700">WASD / Setas</span>
+            <span>Andar</span>
+            <span class="px-2 py-1 bg-slate-100 border border-slate-300 rounded font-mono font-bold text-slate-700">ESPAÇO / E</span>
+            <span>Interagir / Portas</span>
+            <span class="px-2 py-1 bg-slate-100 border border-slate-300 rounded font-mono font-bold text-slate-700">P</span>
+            <span>Prancheta</span>
+          </div>
+          <button onclick="startGame()" class="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-extrabold text-sm md:text-base shadow-lg shadow-teal-600/30 transition transform active:scale-95">
+            Iniciar Estágio Hospitalar ▶
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE INTERAÇÃO CLÍNICA (LEITOS, PRESCRIÇÃO, MISSÕES, COORDENAÇÃO) -->
+  <div id="clinicalModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-2.5 md:p-6">
+    <div class="bg-white w-full max-w-3xl max-h-[92vh] rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+      <!-- Cabeçalho -->
+      <div id="cModalHeader" class="p-4 md:p-6 text-white bg-gradient-to-r from-sky-700 to-blue-700 flex items-start justify-between gap-4">
+        <div>
+          <div id="cModalBadge" class="inline-block px-3 py-1 rounded-full bg-white/20 text-xs font-bold uppercase tracking-wider mb-1">
+            Ala Dorothea Orem • Leito 01
+          </div>
+          <h2 id="cModalTitle" class="text-lg md:text-2xl font-extrabold leading-snug">
+            Paciente: Sr. Alberto
+          </h2>
+        </div>
+        <button onclick="closeClinicalModal()" class="w-9 h-9 rounded-xl bg-white/15 hover:bg-white/25 flex items-center justify-center text-white font-bold transition shrink-0">
+          ✕
+        </button>
+      </div>
+
+      <!-- Corpo Rolável -->
+      <div id="cModalBody" class="p-4 md:p-6 overflow-y-auto custom-scroll space-y-4 flex-1 text-sm md:text-[15px]">
+        <!-- Preenchido dinamicamente -->
+      </div>
+
+      <!-- Rodapé -->
+      <div class="p-3.5 md:p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
+        <span id="cModalFooterHint" class="text-xs font-semibold text-slate-500">
+          Analise o caso clínico do paciente e responda
+        </span>
+        <button onclick="closeClinicalModal()" class="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs md:text-sm transition">
+          Fechar / Voltar ao Setor
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL "MINHA PRANCHETA" (COM PRENDEDOR METÁLICO E ABAS DO ROTEIRO) -->
+  <div id="clipboardModal" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-2 md:p-5">
+    <div class="relative w-full max-w-4xl max-h-[92vh] flex flex-col pt-5">
+      <!-- Prendedor Metálico Superior da Prancheta -->
+      <div class="mx-auto w-44 h-9 bg-gradient-to-b from-slate-300 via-slate-400 to-slate-500 rounded-t-2xl border-2 border-slate-600 shadow-lg flex items-center justify-center z-10 -mb-3">
+        <div class="w-24 h-3 bg-slate-700 rounded-full shadow-inner"></div>
+      </div>
+
+      <!-- Corpo de Madeira/Acrílico da Prancheta -->
+      <div class="bg-amber-900 p-2.5 md:p-3.5 rounded-3xl shadow-2xl border-2 border-amber-950 flex-1 flex flex-col overflow-hidden">
+        <!-- Folha de Papel Pautada -->
+        <div class="clipboard-paper rounded-2xl flex-1 flex flex-col overflow-hidden border border-amber-200 shadow-inner">
+          <!-- Cabeçalho da Folha -->
+          <div class="p-4 md:p-5 bg-white/90 border-b border-slate-300 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div class="text-[11px] font-black uppercase tracking-widest text-teal-700">Hospital Universitário • Estágio Supervisionado</div>
+              <h2 class="text-lg md:text-2xl font-black text-slate-900 flex items-center gap-2">
+                <span>📋 Minha Prancheta Clínica</span>
+              </h2>
+            </div>
+            <button onclick="closeClipboardModal()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition">
+              Fechar Prancheta ✕
+            </button>
+          </div>
+
+          <!-- Abas de Navegação -->
+          <div class="px-4 pt-3 bg-slate-100/90 border-b border-slate-300 flex flex-wrap gap-1.5 text-xs font-bold">
+            <button id="tabBtnOrem" onclick="switchClipboardTab('orem')" class="px-3.5 py-2 rounded-t-xl bg-sky-700 text-white transition">
+              📘 Roteiro: Dorothea Orem (7 Tópicos)
+            </button>
+            <button id="tabBtnHorta" onclick="switchClipboardTab('horta')" class="px-3.5 py-2 rounded-t-xl bg-white text-slate-700 hover:bg-slate-200 transition">
+              📗 Roteiro: Wanda Horta (7 Tópicos)
+            </button>
+            <button id="tabBtnPatients" onclick="switchClipboardTab('patients')" class="px-3.5 py-2 rounded-t-xl bg-white text-slate-700 hover:bg-slate-200 transition">
+              🛏️ Pacientes & Prescrições
+            </button>
+            <button id="tabBtnMissions" onclick="switchClipboardTab('missions')" class="px-3.5 py-2 rounded-t-xl bg-white text-slate-700 hover:bg-slate-200 transition">
+              🩺 Missões & Littmann
+            </button>
+          </div>
+
+          <!-- Conteúdo da Aba Ativa -->
+          <div id="clipboardTabContent" class="p-4 md:p-6 overflow-y-auto custom-scroll flex-1 space-y-4 text-sm text-slate-800 leading-relaxed">
+            <!-- Preenchido via JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST DE MENSAGENS -->
+  <div id="toastBox" class="hidden fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 text-white border border-amber-400 px-5 py-3 rounded-2xl shadow-2xl text-xs md:text-sm font-bold text-center max-w-lg">
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. ÁUDIO PROCEDURAL (WEB AUDIO API)
+    // =========================================================================
+    let audioCtx = null;
+    let audioEnabled = true;
+
+    function initAudio() {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) audioCtx = new AC();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function toggleAudio() {
+      audioEnabled = !audioEnabled;
+      document.getElementById('btnAudio').textContent = audioEnabled ? '🔊' : '🔇';
+    }
+
+    function playTone(freq, type = 'sine', duration = 0.1, vol = 0.07) {
+      if (!audioEnabled || !audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {}
+    }
+
+    function sfxSuccess() {
+      playTone(523.25, 'triangle', 0.11, 0.09);
+      setTimeout(() => playTone(659.25, 'triangle', 0.11, 0.09), 90);
+      setTimeout(() => playTone(783.99, 'triangle', 0.22, 0.11), 180);
+    }
+
+    function sfxError() {
+      playTone(210, 'sawtooth', 0.16, 0.07);
+      setTimeout(() => playTone(165, 'sawtooth', 0.2, 0.07), 130);
+    }
+
+    function sfxDoor() {
+      playTone(320, 'sine', 0.08, 0.06);
+      setTimeout(() => playTone(420, 'sine', 0.12, 0.06), 70);
+    }
+
+    function sfxInteract() {
+      playTone(480, 'sine', 0.08, 0.06);
+    }
+
+    // =========================================================================
+    // 2. BANCO DE DADOS COMPLETO DO SEMINÁRIO (7 TÓPICOS OBRIGATÓRIOS)
+    // =========================================================================
+    const SEMINAR_CONTENT = {
+      orem: {
+        title: 'Teoria do Déficit de Autocuidado de Enfermagem — Dorothea E. Orem',
+        color: 'sky',
+        topics: [
+          {
+            num: '1. Autora e Contexto Histórico',
+            body: `<strong>Dorothea Elizabeth Orem</strong> (1914–2007), enfermeira norte-americana, desenvolveu sua teoria nos <strong>Estados Unidos entre as décadas de 1950 e 1970</strong> (primeira publicação estruturada em 1959, consolidada no livro <em>Nursing: Concepts of Practice</em> em 1971). Orem buscava responder a uma questão fundamental: <em>"Qual é o domínio próprio e a razão de existir da Enfermagem como disciplina científica?"</em>, superando a visão de que a enfermagem era apenas uma extensão auxiliar da medicina e aprimorando currículos técnicos e superiores.`
+          },
+          {
+            num: '2. Classificação Epistemológica e Foco Central',
+            body: `Classifica-se como uma <strong>Grande Teoria (Teoria Geral de Enfermagem)</strong> composta por <strong>três subteorias inter-relacionadas</strong>: (a) Teoria do Autocuidado, (b) Teoria do Déficit de Autocuidado e (c) Teoria dos Sistemas de Enfermagem. Seu <strong>fenômeno central</strong> é a capacidade deliberada do indivíduo de cuidar de si mesmo para manter a vida, a saúde e o bem-estar, e a intervenção da enfermagem quando ocorre incapacidade ou limitação para esse autocuidado.`
+          },
+          {
+            num: '3. Ideias Centrais e Conexão Dinâmica entre os Conceitos',
+            body: `Os conceitos de Orem operam como um sistema lógico articulado:<br>
+            • Todo ser humano possui <strong>Requisitos de Autocuidado</strong> (<em>Universais</em>: ar, água, alimento, eliminação, equilíbrio atividade/repouso e solidão/interação, prevenção de riscos; <em>Desenvolvimento</em>: ciclo vital; <em>Desvio de Saúde</em>: doenças e terapias).<br>
+            • O conjunto de ações necessárias para suprir esses requisitos forma a <strong>Demanda Terapêutica de Autocuidado</strong>.<br>
+            • A habilidade adquirida pelo indivíduo para executar essas ações é a <strong>Agência de Autocuidado</strong> (ou <em>Agência de Cuidado Dependente</em>, quando exercida por pais/cuidadores).<br>
+            • <strong>Conexão crítica:</strong> Quando a <em>Demanda Terapêutica supera a Agência de Autocuidado</em>, instala-se o <strong>Déficit de Autocuidado</strong> — ponto exato que legitima a atuação da <strong>Agência de Enfermagem</strong> por meio de três <strong>Sistemas de Enfermagem</strong>: <em>Totalmente Compensatório</em> (enfermeiro faz tudo), <em>Parcialmente Compensatório</em> (ações compartilhadas) e <em>Apoio-Educação</em> (enfermeiro orienta e capacita).`
+          },
+          {
+            num: '4. Metaparadigma da Enfermagem (Pessoa, Saúde, Ambiente e Enfermagem)',
+            body: `• <strong>Pessoa:</strong> Ser biopsicossocial racional, dotado de potencial para aprender, tomar decisões deliberadas e assumir responsabilidade pelo próprio cuidado.<br>
+            • <strong>Saúde:</strong> Estado de integridade física, estrutural e funcional que permite o desenvolvimento humano pleno e o exercício do autocuidado.<br>
+            • <strong>Ambiente:</strong> Conjunto de fatores físicos, químicos, biológicos e sociofamiliares externos que influenciam tanto os requisitos quanto a capacidade de autocuidado.<br>
+            • <strong>Enfermagem:</strong> Serviço humano especializado que supre, compensa ou educa o indivíduo diante de déficits de autocuidado.<br>
+            • <strong>Maior ênfase:</strong> Orem deposita ênfase máxima na <strong>Pessoa</strong> (como agente ativo e autônomo) e na <strong>Enfermagem</strong> (como sistema compensatório e educativo estruturado).`
+          },
+          {
+            num: '5. Aplicação a uma Situação Concreta (Clínica / Comunitária)',
+            body: `<strong>Caso Exemplo:</strong> Paciente adulta recém-diagnosticada com Diabetes Mellitus tipo 2 e úlcera neuropática em pé direito.<br>
+            • <strong>Avaliação:</strong> Verifica-se a Agência de Autocuidado (conhecimento sobre insulina, visão, destreza manual) frente à Demanda Terapêutica (glicemia capilar, insulinoterapia, curativo diário, dieta).<br>
+            • <strong>Identificação do Déficit:</strong> Déficit de autocuidado por desconhecimento técnico da aplicação de insulina e dificuldade de realizar o curativo plantar.<br>
+            • <strong>Planejamento:</strong> Implementação do <em>Sistema Parcialmente Compensatório</em> (enfermeiro realiza o curativo complexo) combinado ao <em>Sistema de Apoio-Educação</em> (treino supervisionado de autoaplicação de insulina).<br>
+            • <strong>Resultados Esperados:</strong> Cicatrização da lesão, controle glicêmico e conquista da autonomia plena do paciente em domicílio.`
+          },
+          {
+            num: '6. Limites, Adequação Clínica e Aspectos Culturais',
+            body: `• <strong>Onde ajuda mais:</strong> Doenças crônicas (diabetes, hipertensão, DPOC), reabilitação motora, pós-operatório e atenção primária/educação em saúde.<br>
+            • <strong>Limites e dificuldades:</strong> Em pacientes em coma, neonatos ou quadros psiquiátricos agudos, a autonomia deliberada está ausente (exigindo compensação total contínua); além disso, a teoria oferece menor aprofundamento sobre determinantes estruturais coletivos e dinâmicas familiares complexas.<br>
+            • <strong>Contexto, cultura e preferências:</strong> O enfermeiro deve respeitar crenças alimentares, religiosidade, escolaridade e condições financeiras ao negociar metas de autocuidado, evitando impor padrões técnicos distantes da realidade cultural da pessoa.`
+          },
+          {
+            num: '7. Fontes Bibliográficas (Obra Original + 4 Fontes Científicas)',
+            body: `<ol class="list-decimal pl-5 space-y-1.5 text-xs text-slate-700">
+              <li><strong>[Obra Original]</strong> OREM, D. E. <em>Nursing: Concepts of Practice</em>. 6. ed. St. Louis: Mosby, 2001. (1. ed. 1971).</li>
+              <li>GEORGE, J. B. <em>Teorias de Enfermagem: os fundamentos à prática profissional</em>. 4. ed. Porto Alegre: Artmed, 2000.</li>
+              <li>MCWEN, M.; WILLS, E. M. <em>Bases Teóricas de Enfermagem</em>. 4. ed. Porto Alegre: Artmed, 2016.</li>
+              <li>QUEIRÓS, P. J. P.; VIDINHA, T. S. S.; ALMEIDA FILHO, A. J. Autocuidado: o contributo teórico de Orem para a disciplina e profissão de Enfermagem. <em>Revista de Enfermagem Referência</em>, Coimbra, v. 4, n. 3, p. 157-164, 2014.</li>
+              <li>HERNÁNDEZ, Y. N.; PACHECO, J. A. C.; LARREYNAGA, M. R. La teoría Déficit de autocuidado: Dorothea Elizabeth Orem. <em>Gaceta Médica Espirituana</em>, v. 19, n. 3, p. 89-100, 2017.</li>
+            </ol>`
+          }
+        ]
+      },
+
+      horta: {
+        title: 'Teoria das Necessidades Humanas Básicas — Wanda de Aguiar Horta',
+        color: 'emerald',
+        topics: [
+          {
+            num: '1. Autora e Contexto Histórico',
+            body: `<strong>Wanda de Aguiar Horta</strong> (1926–1981), enfermeira brasileira nascida em Belém (PA) e professora titular da Escola de Enfermagem da USP, desenvolveu sua teoria no <strong>Brasil entre o final da década de 1960 e a década de 1970</strong> (consolidada na obra clássica <em>Processo de Enfermagem</em>, de 1979). Em um contexto em que a enfermagem brasileira era fortemente centrada em técnicas fragmentadas e submissa ao modelo biomédico hospitalocêntrico, Horta buscou conferir <strong>estatuto científico próprio</strong> e metodologia sistematizada ao cuidado de enfermagem.`
+          },
+          {
+            num: '2. Classificação Epistemológica e Foco Central',
+            body: `Classifica-se como uma <strong>Grande Teoria / Modelo Conceitual de Enfermagem</strong> fundamentado na <em>Teoria da Motivação Humana</em> de Abraham Maslow e na classificação das necessidades de <strong>João Mohana</strong>, além das leis universais do equilíbrio (homeostase/homeodinâmica), da adaptação e do holismo. Seu <strong>fenômeno central</strong> é o atendimento às <strong>Necessidades Humanas Básicas (NHB)</strong> afetadas por desequilíbrios hemodinâmicos, visando reconduzir o ser humano ao estado de equilíbrio dinâmico.`
+          },
+          {
+            num: '3. Ideias Centrais e Conexão Dinâmica entre os Conceitos',
+            body: `Os conceitos de Horta conectam-se de forma cíclica e operacional:<br>
+            • Todo ser humano é parte de um universo dinâmico e busca continuamente o <strong>equilíbrio (homeodinâmica)</strong>.<br>
+            • Desequilíbrios geram tensões conscientes ou inconscientes denominadas <strong>Necessidades Humanas Básicas (NHB)</strong>, classificadas em três dimensões inter-relacionadas: <strong>Psicobiológicas</strong> (oxigenação, hidratação, nutrição, eliminação, sono, integridade física), <strong>Psicossociais</strong> (segurança, amor, gregária, comunicação, autoestima, aprendizagem) e <strong>Psicoespirituais</strong> (religiosa/teológica, ética/filosofia de vida).<br>
+            • <strong>Conexão operacional:</strong> Para identificar as NHB afetadas e "assistir em enfermagem" (<em>fazer por, ajudar, orientar, supervisionar e encaminhar</em>), Horta criou o <strong>Processo de Enfermagem em 6 etapas inter-relacionadas</strong>: (1) <em>Histórico de Enfermagem</em> → (2) <em>Diagnóstico de Enfermagem</em> → (3) <em>Plano Assistencial</em> → (4) <em>Plano de Cuidados / Prescrição</em> → (5) <em>Evolução de Enfermagem</em> → (6) <em>Prognóstico de Enfermagem</em>.`
+          },
+          {
+            num: '4. Metaparadigma da Enfermagem (Pessoa, Saúde, Ambiente e Enfermagem)',
+            body: `• <strong>Pessoa (Ser Humano):</strong> Ser holístico, indivisível, agente de mudanças no universo dinâmico, dotado de necessidades psicobiológicas, psicossociais e psicoespirituais.<br>
+            • <strong>Saúde:</strong> Estar em equilíbrio dinâmico no tempo e no espaço (homeodinâmica), capaz de manter suas necessidades básicas atendidas.<br>
+            • <strong>Ambiente:</strong> O universo dinâmico no qual o ser humano está inserido e com o qual interage constantemente, podendo gerar estímulos de equilíbrio ou desequilíbrio.<br>
+            • <strong>Enfermagem:</strong> Ciência e arte de assistir o ser humano no atendimento de suas necessidades básicas, tornando-o independente desta assistência quando possível, pelo ensino do autocuidado.<br>
+            • <strong>Maior ênfase:</strong> Horta enfatiza fortemente a <strong>Pessoa</strong> (como totalidade holística biopsicossocioespiritual) e a <strong>Saúde</strong> (como equilíbrio dinâmico contínuo).`
+          },
+          {
+            num: '5. Aplicação a uma Situação Concreta (Clínica / Hospitalar)',
+            body: `<strong>Caso Exemplo:</strong> Paciente idoso internado por insuficiência cardíaca descompensada, apresentando ortopneia, edema de membros inferiores e intensa angústia pela distância da família.<br>
+            • <strong>Histórico e Diagnóstico (Horta):</strong> Identificam-se NHB Psicobiológicas afetadas (<em>Oxigenação</em>, <em>Regulação Vascular</em> e <em>Sono/Repouso</em>) e NHB Psicossociais afetadas (<em>Segurança Emocional</em> e <em>Gregária</em>).<br>
+            • <strong>Plano Assistencial e Prescrição:</strong> Manter cabeceira elevada a 45°, monitorar oximetria e balanço hídrico rigoroso, promover escuta terapêutica e flexibilizar visita familiar.<br>
+            • <strong>Evolução e Prognóstico:</strong> Registro diário da melhora do padrão respiratório e estimativa de recuperação gradual da independência para alta hospitalar.`
+          },
+          {
+            num: '6. Limites, Adequação Clínica e Aspectos Culturais',
+            body: `• <strong>Onde ajuda mais:</strong> Prática hospitalar brasileira, sistematização da assistência de enfermagem (SAE), planejamento integral do cuidado e formação clínica generalista.<br>
+            • <strong>Limites e dificuldades:</strong> Dificuldade operacional em executar todas as 6 etapas completas (especialmente o Prognóstico separado) em unidades com subdimensionamento de pessoal; subjetividade na mensuração das necessidades psicoespirituais; menor ênfase na análise crítica de determinantes sociais e políticas públicas de saúde.<br>
+            • <strong>Contexto, cultura e preferências:</strong> A hierarquia das necessidades não é rígida — valores culturais, espiritualidade e preferências individuais podem tornar uma necessidade psicossocial ou espiritual tão prioritária quanto uma biológica.`
+          },
+          {
+            num: '7. Fontes Bibliográficas (Obra Original + 4 Fontes Científicas)',
+            body: `<ol class="list-decimal pl-5 space-y-1.5 text-xs text-slate-700">
+              <li><strong>[Obra Original]</strong> HORTA, W. A. <em>Processo de Enfermagem</em>. São Paulo: EPU / EDUSP, 1979.</li>
+              <li>TANNURE, M. C.; PINHEIRO, A. M. <em>SAE: Sistematização da Assistência de Enfermagem — Guia Prático</em>. 3. ed. Rio de Janeiro: Guanabara Koogan, 2019.</li>
+              <li>GARCIA, T. R.; NÓBREGA, M. M. L. Processo de enfermagem: da teoria à prática assistencial e de pesquisa. <em>Escola Anna Nery Revista de Enfermagem</em>, v. 13, n. 1, p. 188-193, 2009.</li>
+              <li>CIANCIARULLO, T. I. et al. <em>Sistema de Assistência de Enfermagem: evolução e tendências</em>. 5. ed. São Paulo: Ícone, 2012.</li>
+              <li>LEOPARDI, M. T. <em>Teoria e Método em Assistência de Enfermagem</em>. 2. ed. Florianópolis: Soldasoft, 2006.</li>
+            </ol>`
+          }
+        ]
+      }
+    };
+
+    // =========================================================================
+    // 3. BANCO DE DADOS DINÂMICO DE PACIENTES (SORTEADOS A CADA NOVA PARTIDA)
+    // =========================================================================
+    // Pool para Ala Dorothea Orem (14 pacientes para preencher 10 leitos aleatoriamente)
+    const POOL_OREM = [
+      {
+        name: 'Sr. Alberto Mendes', age: 62, gender: 'M', hair: '#94a3b8', blanket: '#38bdf8',
+        diagnosis: 'Diabetes Mellitus Tipo 2 descompensado',
+        vitals: 'PA: 138x84 mmHg | FC: 82 bpm | HGT: 294 mg/dL | Tax: 36,6°C',
+        history: 'Internado para ajuste de insulinoterapia NPH e Regular. Relata nunca ter aplicado insulina sozinho e tem medo de errar a dose.',
+        seminarFocus: 'Ideias Centrais: Requisitos de Desvio de Saúde & Sistema Apoio-Educação',
+        question: 'Segundo Dorothea Orem, qual é a relação conceitual entre a condição do Sr. Alberto e o Sistema de Enfermagem indicado?',
+        options: [
+          'A insulinoterapia é um Requisito de Desvio de Saúde; como ele tem capacidade física mas falta conhecimento, indica-se o Sistema de Apoio-Educação.',
+          'Trata-se de um Requisito Universal; como está hiperglicêmico, indica-se o Sistema Totalmente Compensatório permanente.',
+          'Não há Déficit de Autocuidado, pois a Agência de Autocuidado já supera a Demanda Terapêutica.',
+          'O Ambiente hospitalar substitui a necessidade de participação ativa da Pessoa no autocuidado.'
+        ],
+        correct: 0,
+        rationale: 'Correto! O tratamento do diabetes gera Requisitos de Desvio de Saúde. O déficit decorre da falta de saber técnico, sendo resolvido pelo Sistema de Apoio-Educação.'
+      },
+      {
+        name: 'Sr. Charlie Oliveira', age: 49, gender: 'M', hair: '#475569', blanket: '#818cf8',
+        diagnosis: 'Pós-operatório imediato de Artroplastia Total de Quadril',
+        vitals: 'PA: 124x78 mmHg | FC: 76 bpm | SpO2: 97% | Dor: 4/10',
+        history: 'Restrito ao leito nas primeiras 24h. Consegue escovar os dentes e alimentar-se sentado, mas necessita de auxílio da enfermagem para banho no leito e troca de curativo operatório.',
+        seminarFocus: 'Ideias Centrais: Déficit de Autocuidado & Sistema Parcialmente Compensatório',
+        question: 'Analisando a Agência de Autocuidado versus Demanda Terapêutica do Sr. Charlie, qual sistema de Orem melhor descreve essa assistência?',
+        options: [
+          'Sistema Totalmente Compensatório, pois ele está internado em hospital.',
+          'Sistema Parcialmente Compensatório, pois enfermeiro e paciente executam juntos as medidas de autocuidado conforme suas limitações.',
+          'Sistema de Apoio-Educação exclusivo, sem intervenção física da enfermagem.',
+          'Requisito de Desenvolvimento infantil adaptado ao adulto.'
+        ],
+        correct: 1,
+        rationale: 'Exato! Quando o paciente realiza parte das ações (higiene oral/alimentação) e a enfermagem compensa o que ele não consegue (banho/curativo), temos o Sistema Parcialmente Compensatório.'
+      },
+      {
+        name: 'Dona Clarice Vasconcelos', age: 74, gender: 'F', hair: '#e2e8f0', blanket: '#2dd4bf',
+        diagnosis: 'Acidente Vascular Encefálico Isquêmico (Hemiplegia à direita)',
+        vitals: 'PA: 146x88 mmHg | FC: 84 bpm | SpO2: 95% | Glasgow: 14',
+        history: 'Dona Clarice é destra e perdeu a força motora do lado direito. Sua filha mora com ela e deseja aprender a auxiliar na higiene e prevenção de lesões.',
+        seminarFocus: 'Conceitos Centrais: Agência de Cuidado Dependente',
+        question: 'Na teoria de Dorothea Orem, como é denominado o papel assumido pela filha de Dona Clarice ao suprir as demandas de cuidado da mãe?',
+        options: [
+          'Agência de Cuidado Dependente (Agente de Cuidado Dependente)',
+          'Requisito Universal de Solidão e Interação',
+          'Prognóstico de Enfermagem Compensatório',
+          'Homeodinâmica Familiar Primária'
+        ],
+        correct: 0,
+        rationale: 'Muito bem! Orem denomina "Agência de Cuidado Dependente" a capacidade de familiares ou responsáveis atenderem às demandas terapêuticas de pessoas dependentes.'
+      },
+      {
+        name: 'Lucas Ferreira', age: 27, gender: 'M', hair: '#1e293b', blanket: '#60a5fa',
+        diagnosis: 'Fratura de Rádio e Ulna (Gesso em membro superior dominante)',
+        vitals: 'PA: 118x74 mmHg | FC: 70 bpm | SpO2: 99% | Tax: 36,5°C',
+        history: 'Estudante universitário, lúcido e deambulando, com braço direito imobilizado. Precisa de ajuda para cortar alimentos e vestir-se, além de orientações sobre sinais de síndrome compartimental.',
+        seminarFocus: 'Metaparadigma: Visão de Pessoa e Saúde em Orem',
+        question: 'Como Dorothea Orem compreende a "Pessoa" no caso clínico de Lucas?',
+        options: [
+          'Um receptor passivo que deve aguardar todas as decisões da equipe médica.',
+          'Um ser racional, capaz de refletir, aprender novas habilidades adaptativas e assumir responsabilidade deliberada pelo próprio cuidado.',
+          'Um organismo puramente biológico desvinculado de suas atividades acadêmicas.',
+          'Um indivíduo incapaz de exercer autocuidado enquanto estiver com gesso.'
+        ],
+        correct: 1,
+        rationale: 'Perfeito! No metaparadigma de Orem, a Pessoa é vista como um agente ativo, racional e capaz de deliberar e adaptar seu autocuidado.'
+      },
+      {
+        name: 'Dona Beatriz Nogueira', age: 34, gender: 'F', hair: '#7c2d12', blanket: '#f472b6',
+        diagnosis: 'Puérpera primípara (24h pós-parto normal)',
+        vitals: 'PA: 114x70 mmHg | FC: 78 bpm | Tax: 36,7°C | Mamas íntegras',
+        history: 'Saudável, sem intercorrências obstétricas, porém insegura quanto à pega correta do recém-nascido na amamentação e cuidados com o coto umbilical.',
+        seminarFocus: 'Requisitos de Desenvolvimento & Apoio-Educação',
+        question: 'A maternidade e o puerpério exigem adaptações específicas do ciclo vital. Como Orem classifica esses requisitos e qual é a ação da enfermagem?',
+        options: [
+          'Requisitos de Desenvolvimento; atuação no Sistema de Apoio-Educação para capacitar a mãe.',
+          'Requisitos de Desvio de Saúde grave; atuação no Sistema Totalmente Compensatório.',
+          'Requisitos Universais de Eliminação; prescrição de repouso absoluto.',
+          'Ausência de requisitos, pois gravidez não é doença.'
+        ],
+        correct: 0,
+        rationale: 'Excelente! Os Requisitos de Desenvolvimento associam-se às etapas do ciclo de vida (como gestação e puerpério), demandando Apoio-Educação.'
+      },
+      {
+        name: 'Sr. Joaquim Barbosa', age: 68, gender: 'M', hair: '#cbd5e1', blanket: '#38bdf8',
+        diagnosis: 'DPOC (Doença Pulmonar Obstrutiva Crônica) em reabilitação',
+        vitals: 'PA: 132x80 mmHg | FC: 88 bpm | FR: 20 irpm | SpO2: 92%',
+        history: 'Apresenta dispneia aos médios esforços. Recebeu orientação sobre técnica de conservação de energia durante o banho e uso de espaçador para broncodilatador.',
+        seminarFocus: 'Tópico 6: Adequação e Limites da Teoria de Orem',
+        question: 'Considerando os limites e a adequação da teoria de Orem (Tópico 6 do seminário), por que esse modelo é altamente eficaz no caso do Sr. Joaquim?',
+        options: [
+          'Porque Orem é ideal para doenças crônicas e reabilitação, promovendo autonomia, embora exija adaptar orientações ao contexto socioeconômico e cultural do idoso.',
+          'Porque elimina a necessidade de avaliar o ambiente domiciliar do paciente.',
+          'Porque substitui completamente a família no tratamento da DPOC.',
+          'Porque foca exclusivamente em procedimentos invasivos hospitalares.'
+        ],
+        correct: 0,
+        rationale: 'Correto! A teoria de Orem destaca-se no manejo de condições crônicas e reabilitação, desde que o enfermeiro considere escolaridade, cultura e recursos do paciente.'
+      },
+      {
+        name: 'Fernanda Siqueira', age: 41, gender: 'F', hair: '#92400e', blanket: '#a78bfa',
+        diagnosis: 'Colostomia definitiva recente pós-neoplasia colorretal',
+        vitals: 'PA: 120x76 mmHg | FC: 74 bpm | Estoma viável e avermelhado',
+        history: 'No início tinha repulsa em olhar para a bolsa de colostomia. Após sessões educativas graduais, já realiza a troca e higienização da placa com supervisão.',
+        seminarFocus: 'Conexão entre Déficit de Autocuidado e Agência de Enfermagem',
+        question: 'O que aconteceu na evolução clínica de Fernanda sob a ótica da Teoria do Déficit de Autocuidado?',
+        options: [
+          'Sua Agência de Autocuidado foi desenvolvida por meio da Agência de Enfermagem, reduzindo progressivamente o Déficit de Autocuidado.',
+          'Sua Demanda Terapêutica deixou de existir após a cirurgia.',
+          'Ela regrediu do Sistema Apoio-Educação para o Totalmente Compensatório.',
+          'A teoria de Orem não se aplica a pacientes ostomizados.'
+        ],
+        correct: 0,
+        rationale: 'Perfeito! A intervenção educativa da enfermagem ampliou a Agência de Autocuidado de Fernanda, superando o déficit inicial.'
+      },
+      {
+        name: 'Sr. Sebastião Ramos', age: 79, gender: 'M', hair: '#f1f5f9', blanket: '#34d399',
+        diagnosis: 'Hipertensão Arterial Sistêmica e Retinopatia Diabética',
+        vitals: 'PA: 162x96 mmHg | FC: 86 bpm | HGT: 185 mg/dL',
+        history: 'Mora sozinho, tem baixa acuidade visual e confunde os horários e comprimidos dos anti-hipertensivos.',
+        seminarFocus: 'Requisitos Universais vs. Desvio de Saúde & Contexto',
+        question: 'Qual fator limita a Agência de Autocuidado do Sr. Sebastião e como a enfermeira deve intervir segundo Orem?',
+        options: [
+          'A limitação sensorial (baixa visão) reduz sua agência; a enfermeira deve adaptar o ambiente (caixas organizadoras táteis/cores) e envolver rede de apoio.',
+          'Falta de força de vontade; deve-se apenas entregar uma bula impressa com letras pequenas.',
+          'Não há déficit, pois hipertensão é assintomática.',
+          'Deve ser mantido internado indefinidamente no Sistema Totalmente Compensatório.'
+        ],
+        correct: 0,
+        rationale: 'Exato! Fatores condicionantes básicos (idade, estado sensorial, sistema familiar) afetam a Agência de Autocuidado e exigem adaptação prática.'
+      },
+      {
+        name: 'Mariana Costa', age: 23, gender: 'F', hair: '#1e293b', blanket: '#fb7185',
+        diagnosis: 'Crise de Asma Brônquica moderada (estabilizada)',
+        vitals: 'PA: 116x72 mmHg | FC: 84 bpm | FR: 18 irpm | SpO2: 97%',
+        history: 'Relata que interrompeu o corticoide inalatório por acreditar que "viciava" e não sabia identificar gatilhos ambientais em sua residência.',
+        seminarFocus: 'Metaparadigma: Ambiente e Prevenção de Riscos (Requisito Universal)',
+        question: 'Na perspectiva de Orem, a manutenção de um ambiente livre de alérgenos e a prevenção de riscos à vida pertencem a qual categoria?',
+        options: [
+          'Requisitos Universais de Autocuidado (ar suficiente e prevenção de perigos à vida e ao bem-estar).',
+          'Exclusivamente ao Sistema Totalmente Compensatório.',
+          'Prognóstico de Enfermagem de Wanda Horta.',
+          'Requisitos de Desenvolvimento geriátrico.'
+        ],
+        correct: 0,
+        rationale: 'Isso mesmo! Manter a ingestão suficiente de ar e prevenir perigos à vida/funcionamento humano são Requisitos Universais de Autocuidado.'
+      },
+      {
+        name: 'Sr. Valdir Teixeira', age: 55, gender: 'M', hair: '#334155', blanket: '#38bdf8',
+        diagnosis: 'Insuficiência Renal Crônica (Início de Hemodiálise via FAV)',
+        vitals: 'PA: 148x90 mmHg | FC: 78 bpm | Frêmito presente em FAV MSE',
+        history: 'Acaba de confeccionar fístula arteriovenosa (FAV) no braço esquerdo. Precisa aprender a verificar o frêmito diariamente e evitar aferição de PA ou punções nesse membro.',
+        seminarFocus: 'Classificação Epistemológica: As 3 Subteorias de Orem',
+        question: 'Qual é a classificação epistemológica correta da obra de Dorothea Orem (Tópico 2 do roteiro)?',
+        options: [
+          'Grande Teoria (Teoria Geral do Déficit de Autocuidado), articulada em três subteorias: Autocuidado, Déficit de Autocuidado e Sistemas de Enfermagem.',
+          'Teoria de Médio Alcance restrita apenas a pacientes renais.',
+          'Protocolo médico de prescrição farmacológica.',
+          'Teoria ambientalista desenvolvida no século XIX.'
+        ],
+        correct: 0,
+        rationale: 'Corretíssimo! Orem construiu uma Grande Teoria composta por três subteorias interdependentes que explicam toda a prática da enfermagem.'
+      },
+      {
+        name: 'Dona Tereza Almeida', age: 66, gender: 'F', hair: '#94a3b8', blanket: '#c084fc',
+        diagnosis: 'Pós-operatório de Mastectomia à esquerda',
+        vitals: 'PA: 122x78 mmHg | FC: 76 bpm | Dreno de sucção ativo (40 mL)',
+        history: 'Receberá alta com dreno portovac. Precisa aprender a esvaziar o reservatório, medir o débito e realizar exercícios suaves com o braço.',
+        seminarFocus: 'Prescrição & Apoio-Educação',
+        hasPrescriptionTask: true,
+        rxScenario: 'Dona Tereza irá para casa com dreno de sucção e necessita prevenir linfedema e infecção.',
+        rxOptions: [
+          { text: 'Orientar esvaziamento e mensuração diária do dreno + cuidados com membro homolateral (Sistema Apoio-Educação)', correct: true },
+          { text: 'Aferir pressão arterial e realizar punções venosas exclusivamente no braço esquerdo operado', correct: false },
+          { text: 'Manter repouso absoluto no leito sem movimentar o ombro por 60 dias', correct: false }
+        ],
+        question: 'Qual é o objetivo central da Enfermagem segundo Orem ao preparar Dona Tereza para a alta com dreno?',
+        options: [
+          'Capacitar sua Agência de Autocuidado para que ela atenda com segurança aos Requisitos de Desvio de Saúde em domicílio.',
+          'Manter a paciente dependente da equipe de enfermagem por tempo indeterminado.',
+          'Focar apenas nos aspectos espirituais sem treinar habilidades manuais.',
+          'Substituir a paciente na execução do cuidado mesmo após a recuperação.'
+        ],
+        correct: 0,
+        rationale: 'Perfeito! O foco de Orem é capacitar a pessoa para superar o déficit e exercer o autocuidado seguro.'
+      }
+    ];
+
+    // Pool para Ala Wanda de A. Horta (12 pacientes para preencher 10 leitos aleatoriamente)
+    const POOL_HORTA = [
+      {
+        name: 'Dona Maria do Carmo', age: 71, gender: 'F', hair: '#e2e8f0', blanket: '#34d399',
+        diagnosis: 'Insuficiência Cardíaca Congestiva (Perfil B)',
+        vitals: 'PA: 150x92 mmHg | FC: 96 bpm | FR: 24 irpm | SpO2: 91% | Edema MMII ++/4+',
+        history: 'Refere cansaço ao deitar-se horizontalmente (ortopneia), insônia e preocupação intensa com quem cuidará de seu neto enquanto estiver internada.',
+        seminarFocus: 'Ideias Centrais: Hierarquia das NHB (Psicobiológicas e Psicossociais)',
+        question: 'Segundo Wanda Horta (baseada em Maslow e João Mohana), quais Necessidades Humanas Básicas estão afetadas em Dona Maria e qual é prioritária?',
+        options: [
+          'Oxigenação e Regulação Vascular (Psicobiológicas - prioritárias à vida) e Segurança/Gregária (Psicossociais).',
+          'Apenas necessidades Psicoespirituais, pois o cansaço é puramente emocional.',
+          'Requisitos de Desvio de Saúde de Dorothea Orem.',
+          'Apenas necessidade de Recreação e Auto-realização.'
+        ],
+        correct: 0,
+        rationale: 'Exato! Para Horta, as NHB Psicobiológicas (como oxigenação) têm prioridade vital imediata, sem negligenciar as necessidades Psicossociais associadas.'
+      },
+      {
+        name: 'Sr. Antenor Rodrigues', age: 58, gender: 'M', hair: '#64748b', blanket: '#10b981',
+        diagnosis: 'Pneumonia Comunitária + Desidratação leve',
+        vitals: 'PA: 112x70 mmHg | FC: 102 bpm | FR: 22 irpm | Tax: 38,4°C | SpO2: 93%',
+        history: 'Apresenta febre, mucosas secas e tosse produtiva. A enfermeira realiza entrevista e exame físico completo na admissão para levantar seus problemas.',
+        seminarFocus: 'Ideias Centrais: Etapa 1 do Processo de Enfermagem de Horta',
+        question: 'Na sistematização proposta por Wanda Horta em 6 etapas, como se denomina essa primeira fase de coleta sistematizada de dados para identificar problemas?',
+        options: [
+          'Histórico de Enfermagem',
+          'Prognóstico de Enfermagem',
+          'Plano Assistencial',
+          'Evolução de Enfermagem'
+        ],
+        correct: 0,
+        rationale: 'Perfeito! O Histórico de Enfermagem é a 1ª etapa do processo de Horta: um roteiro sistematizado para levantamento de dados do ser humano.'
+      },
+      {
+        name: 'Juliana Freitas', age: 29, gender: 'F', hair: '#7c2d12', blanket: '#fbbf24',
+        diagnosis: 'Pielonefrite Aguda em antibioticoterapia EV',
+        vitals: 'PA: 118x74 mmHg | FC: 90 bpm | Tax: 37,9°C | Dor lombar: 6/10',
+        history: 'Sente dor lombar e relata sentir-se muito sozinha e angustiada espiritualmente, pedindo a visita do capelão do hospital para fazer uma oração.',
+        seminarFocus: 'Metaparadigma: Visão Holística de Pessoa e NHB Psicoespirituais',
+        question: 'Como Wanda Horta fundamenta o atendimento ao pedido de Juliana pela visita do capelão?',
+        options: [
+          'A Pessoa é um ser holístico e indivisível; as Necessidades Psicoespirituais (religiosa/ética) integram o ser humano e influenciam seu equilíbrio dinâmico.',
+          'A enfermagem deve ignorar pedidos religiosos por não fazerem parte das ciências biológicas.',
+          'Necessidades espirituais só existem após a alta hospitalar.',
+          'O ser humano é dividido em partes isoladas, cabendo ao enfermeiro apenas medicar a dor.'
+        ],
+        correct: 0,
+        rationale: 'Excelente! O holismo é um princípio central de Horta: o ser humano não é fragmentado, e suas necessidades psicoespirituais integram o cuidado.'
+      },
+      {
+        name: 'Sr. Geraldo Magela', age: 64, gender: 'M', hair: '#94a3b8', blanket: '#2dd4bf',
+        diagnosis: 'Cirrose Hepática compensada com ascite moderada',
+        vitals: 'PA: 110x68 mmHg | FC: 80 bpm | FR: 20 irpm | Peso: 78 kg',
+        history: 'A enfermeira já identificou as necessidades afetadas e estabeleceu o plano global. Agora redige o roteiro diário com horários aprazados para a equipe técnica executar.',
+        seminarFocus: 'Processo de Enfermagem: Plano Assistencial vs. Plano de Cuidados',
+        question: 'Qual é a diferença entre a 3ª etapa (Plano Assistencial) e a 4ª etapa (Plano de Cuidados/Prescrição) na teoria de Wanda Horta?',
+        options: [
+          'O Plano Assistencial é a determinação global da assistência; o Plano de Cuidados (Prescrição) é o roteiro diário aprazado que coordena a ação da equipe.',
+          'Ambos são sinônimos de alta médica.',
+          'O Plano de Cuidados ocorre antes do Histórico de Enfermagem.',
+          'O Plano Assistencial é feito apenas pelo paciente.'
+        ],
+        correct: 0,
+        rationale: 'Corretíssimo! Horta distingue o planejamento global (Plano Assistencial) da operacionalização diária aprazada pela enfermeira (Plano de Cuidados/Prescrição).'
+      },
+      {
+        name: 'Camila Pacheco', age: 36, gender: 'F', hair: '#1e293b', blanket: '#a78bfa',
+        diagnosis: 'Pós-operatório de Colecistectomia Videolaparoscópica',
+        vitals: 'PA: 120x78 mmHg | FC: 74 bpm | Tax: 36,5°C | Deambulando com auxílio',
+        history: 'Após 24 horas de cuidados prescritos, a enfermeira registra no prontuário a melhora da dor, aceitação da dieta e retorno do peristaltismo, estimando alta em 24h.',
+        seminarFocus: 'Processo de Enfermagem: Evolução e Prognóstico de Enfermagem',
+        question: 'Quais são respectivamente a 5ª e a 6ª etapas do Processo de Enfermagem de Wanda Horta evidenciadas no registro de Camila?',
+        options: [
+          'Evolução de Enfermagem (relato diário das mudanças) e Prognóstico de Enfermagem (estimativa da capacidade de atender às NHB após o plano).',
+          'Histórico e Diagnóstico de Enfermagem.',
+          'Agência de Autocuidado e Demanda Terapêutica.',
+          'Triagem e Alta Administrativa.'
+        ],
+        correct: 0,
+        rationale: 'Brilhante! A 5ª etapa é a Evolução (avaliação das mudanças sucessivas) e a 6ª é o Prognóstico (estimativa da independência futura do paciente).'
+      },
+      {
+        name: 'Sr. Benedito Silva', age: 76, gender: 'M', hair: '#f8fafc', blanket: '#34d399',
+        diagnosis: 'Desnutrição proteico-calórica e Disfagia pós-AVE',
+        vitals: 'PA: 126x76 mmHg | FC: 72 bpm | IMC: 17,8 kg/m²',
+        history: 'Em uso de sonda nasoenteral para nutrição. A enfermeira verifica posicionamento da sonda, administra dieta e encaminha o caso à fonoaudiologia e nutrição.',
+        seminarFocus: 'Conceito de "Assistir em Enfermagem" (Os 5 Verbos de Horta)',
+        question: 'Na definição de "Assistir em Enfermagem" de Wanda Horta, quais são as ações exercidas pela enfermeira ao cuidar do Sr. Benedito?',
+        options: [
+          'Fazer por, ajudar, orientar, supervisionar e encaminhar a outros profissionais, visando torná-lo independente quando possível.',
+          'Apenas cumprir ordens médicas sem autonomia diagnóstica.',
+          'Substituir permanentemente todas as funções fisiológicas do paciente.',
+          'Isolar o paciente de outros profissionais da equipe multiprofissional.'
+        ],
+        correct: 0,
+        rationale: 'Isso mesmo! Horta sintetiza o "assistir" em cinco verbos fundamentais: fazer por, ajudar, orientar, supervisionar e encaminhar.'
+      },
+      {
+        name: 'Renata Vasques', age: 44, gender: 'F', hair: '#92400e', blanket: '#f472b6',
+        diagnosis: 'Lúpus Eritematoso Sistêmico em atividade cutâneo-articular',
+        vitals: 'PA: 128x82 mmHg | FC: 84 bpm | Tax: 37,2°C',
+        history: 'Apresenta lesões malares e queda de cabelo, relatando vergonha de receber visitas e baixa autoestima.',
+        seminarFocus: 'Classificação das NHB: Autoimagem e Autoestima (Psicossociais)',
+        question: 'Dentro das Necessidades Psicossociais classificadas na teoria de Horta, quais necessidades estão diretamente comprometidas em Renata?',
+        options: [
+          'Autoimagem, Autoestima e Aceitação/Gregária.',
+          'Termorregulação e Oxigenação.',
+          'Eliminação Vesical e Hidratação.',
+          'Necessidade Teológica exclusiva.'
+        ],
+        correct: 0,
+        rationale: 'Correto! Alterações corporais impactam diretamente as necessidades psicossociais de autoimagem, autoestima e convívio social.'
+      },
+      {
+        name: 'Sr. Orlando Peixoto', age: 69, gender: 'M', hair: '#cbd5e1', blanket: '#60a5fa',
+        diagnosis: 'Hérnia Inguinal encarcerada (Pós-operatório)',
+        vitals: 'PA: 130x80 mmHg | FC: 76 bpm | Tax: 36,6°C',
+        history: 'Enfermaria com 40 pacientes e apenas 2 enfermeiros no plantão. A equipe enfrenta dificuldade para preencher todas as 6 etapas extensas do modelo original de Horta.',
+        seminarFocus: 'Tópico 6: Limites e Desafios Operacionais da Teoria de Horta',
+        question: 'Qual é uma das principais limitações práticas apontadas na literatura sobre a aplicação da teoria de Wanda Horta (Tópico 6 do seminário)?',
+        options: [
+          'A extensão das 6 etapas (como separar Plano Assistencial, Prescrição e Prognóstico) gera sobrecarga burocrática diante do subdimensionamento de enfermagem.',
+          'A teoria não reconhece a existência de necessidades biológicas.',
+          'Foi criada exclusivamente para atendimento ambulatorial nos EUA.',
+          'Proíbe o uso de diagnósticos de enfermagem.'
+        ],
+        correct: 0,
+        rationale: 'Muito bem! Estudos brasileiros apontam que a operacionalização completa das 6 etapas sofre barreiras pelo dimensionamento reduzido de pessoal e sobrecarga de registros.'
+      },
+      {
+        name: 'Patrícia Lemos', age: 31, gender: 'F', hair: '#475569', blanket: '#fbbf24',
+        diagnosis: 'Crise álgica por Anemia Falciforme',
+        vitals: 'PA: 124x78 mmHg | FC: 98 bpm | SpO2: 95% | Dor: 8/10',
+        history: 'Sente dor intensa nos membros e solicita que a equipe respeite seu ritual de escutar música calma e manter iluminação baixa para aliviar a tensão.',
+        seminarFocus: 'Metaparadigma: Ambiente e Preferências Culturais',
+        question: 'Como o "Ambiente" e a "Saúde" são definidos no metaparadigma de Wanda Horta?',
+        options: [
+          'Ambiente é o universo dinâmico em constante interação com o ser humano; Saúde é estar em equilíbrio dinâmico (homeodinâmica) no tempo e no espaço.',
+          'Ambiente é apenas a estrutura física das paredes do hospital; Saúde é ausência total de qualquer sintoma.',
+          'Ambiente não interfere nas necessidades humanas básicas.',
+          'Saúde é um estado estático imutável.'
+        ],
+        correct: 0,
+        rationale: 'Perfeito! Para Horta, saúde é equilíbrio dinâmico (homeodinâmica) e o ambiente é o universo dinâmico com o qual o ser interage.'
+      },
+      {
+        name: 'Sr. Nilson Tavares', age: 61, gender: 'M', hair: '#334155', blanket: '#34d399',
+        diagnosis: 'Úlcera Venosa Crônica em membro inferior esquerdo',
+        vitals: 'PA: 134x84 mmHg | FC: 76 bpm | Tax: 36,4°C',
+        history: 'Necessita de curativo compressivo, elevação de membros inferiores e controle da integridade cutâneo-mucosa.',
+        seminarFocus: 'Prescrição de Enfermagem (Etapa 4 de Horta)',
+        hasPrescriptionTask: true,
+        rxScenario: 'Sr. Nilson possui úlcera venosa com edema e risco de infecção (NHB: Integridade Cutâneo-Mucosa e Regulação Vascular).',
+        rxOptions: [
+          { text: 'Realizar curativo oclusivo conforme protocolo, mensurar bordas e manter MMII elevados em repouso (M/T/N)', correct: true },
+          { text: 'Aplicar bolsa de água quente diretamente sobre a lesão aberta a cada 2 horas', correct: false },
+          { text: 'Manter pernas pendentes para baixo durante 12 horas seguidas', correct: false }
+        ],
+        question: 'Em qual grupo de Necessidades Humanas Básicas de Horta classificam-se a "Integridade Cutâneo-Mucosa" e a "Regulação Vascular"?',
+        options: [
+          'Necessidades Psicobiológicas',
+          'Necessidades Psicossociais',
+          'Necessidades Psicoespirituais',
+          'Requisitos de Desenvolvimento'
+        ],
+        correct: 0,
+        rationale: 'Correto! Integridade cutâneo-mucosa, regulação vascular, oxigenação e hidratação pertencem às Necessidades Psicobiológicas.'
+      }
+    ];
+
+    // Pool para UTI (5 Leitos de Alta Complexidade - UTI-01 obrigatoriamente em Ventilação Mecânica!)
+    const POOL_UTI = [
+      {
+        id: 'uti1',
+        bedCode: 'UTI-01',
+        name: 'Sr. Roberto Drummond (VMI)',
+        age: 65,
+        gender: 'M',
+        hair: '#94a3b8',
+        blanket: '#0284c7',
+        isMechanicalVentilation: true, // FLAG ESPECIAL PARA DESENHAR VENTILADOR MECÂNICO E TUBO!
+        diagnosis: 'SDRA grave pós-Pneumonia Viral — Sob Ventilação Mecânica Invasiva (IOT)',
+        vitals: 'PA: 108x64 mmHg | FC: 104 bpm | SpO2: 94% | Modo VCV | FiO2: 50% | PEEP: 10 cmH2O | RASS: -3',
+        history: 'Paciente sedado (RASS -3), intubado sob Ventilação Mecânica Invasiva (VMI), em monitorização hemodinâmica contínua, cateter venoso central e sonda vesical de demora.',
+        seminarFocus: 'UTI • Ventilação Mecânica: Integração Totalmente Compensatório (Orem) + Oxigenação (Horta)',
+        hasPrescriptionTask: true,
+        rxScenario: 'Paciente crítico intubado sob Ventilação Mecânica Invasiva (RASS -3) com risco de Pneumonia Associada à Ventilação (PAV).',
+        rxOptions: [
+          { text: 'Manter cabeceira elevada 30°-45°, higiene oral com clorexidina 0,12%, controle de pressão do cuff e aspiração traqueal s/n', correct: true },
+          { text: 'Manter decúbito dorsal totalmente plano (0°) e oferecer dieta líquida por via oral', correct: false },
+          { text: 'Solicitar que o paciente sedado realize sua própria aspiração traqueal (Apoio-Educação)', correct: false }
+        ],
+        question: 'Analisando o Sr. Roberto em Ventilação Mecânica Invasiva sob as teorias de Orem e Horta, qual afirmação é cientificamente precisa?',
+        options: [
+          'Em Orem, exige o Sistema Totalmente Compensatório (ausência temporária de agência); em Horta, a NHB Psicobiológica de Oxigenação é prioridade máxima.',
+          'Em Orem, aplica-se o Sistema Apoio-Educação; em Horta, prioriza-se a necessidade Psicoespiritual sobre a oxigenação.',
+          'Não há déficit de autocuidado pois o ventilador mecânico substitui a enfermagem.',
+          'Em Horta, a intubação orotraqueal classifica-se como necessidade Psicossocial gregária.'
+        ],
+        correct: 0,
+        rationale: 'Excelente! Na Ventilação Mecânica sob sedação, o paciente depende integralmente da enfermagem (Sistema Totalmente Compensatório de Orem) para manter a NHB vital de Oxigenação (Horta).'
+      },
+      {
+        id: 'uti2',
+        bedCode: 'UTI-02',
+        name: 'Dona Helena Guimarães',
+        age: 72,
+        gender: 'F',
+        hair: '#e2e8f0',
+        blanket: '#0ea5e9',
+        isMechanicalVentilation: false,
+        diagnosis: 'Choque Séptico de foco urinário (em uso de Noradrenalina)',
+        vitals: 'PA: 88x52 mmHg (PAM: 64) | FC: 118 bpm | FR: 26 irpm | Tax: 38,8°C | Lactato: 4,2 mmol/L',
+        history: 'Sonolenta, perfusão periférica lentificada, em infusão contínua de droga vasoativa (Noradrenalina) em bomba de infusão e balanço hídrico horário rigoroso.',
+        seminarFocus: 'UTI • Homeodinâmica (Horta) & Demanda Terapêutica Crítica (Orem)',
+        question: 'No choque séptico de Dona Helena, como Wanda Horta explica a perda da homeodinâmica e o papel do Processo de Enfermagem?',
+        options: [
+          'O choque rompe o equilíbrio dinâmico (homeodinâmica), afetando múltiplas NHBs psicobiológicas (regulação vascular, térmica, eliminação) e exigindo prescrição e evolução horária.',
+          'A homeodinâmica permanece intacta durante o choque séptico.',
+          'O Histórico de Enfermagem deve ser adiado até a alta da UTI.',
+          'O Prognóstico de Enfermagem indica independência imediata nas próximas 2 horas.'
+        ],
+        correct: 0,
+        rationale: 'Perfeito! O choque séptico representa grave desequilíbrio homeodinâmico com múltiplas NHBs afetadas simultaneamente.'
+      },
+      {
+        id: 'uti3',
+        bedCode: 'UTI-03',
+        name: 'Sr. Marcos Vinícius',
+        age: 54,
+        gender: 'M',
+        hair: '#334155',
+        blanket: '#38bdf8',
+        isMechanicalVentilation: false,
+        diagnosis: 'Infarto Agudo do Miocárdio com Supra de ST (Pós-angioplastia)',
+        vitals: 'PA: 116x72 mmHg | FC: 68 bpm | SpO2: 98% | Ritmo Sinusal no monitor',
+        history: 'Lúcido, em repouso absoluto no leito pós-cateterismo femoral direito (curativo compressivo), com medo intenso de sofrer um novo infarto.',
+        seminarFocus: 'UTI • Transição de Sistemas de Orem & Segurança Emocional (Horta)',
+        question: 'Marcos está lúcido, mas restrito ao leito pelo curativo femoral e ansioso. Como integrar Orem e Horta neste leito de UTI?',
+        options: [
+          'Sistema Parcialmente Compensatório + Apoio-Educação (Orem) e atendimento às NHBs de Regulação Vascular e Segurança Emocional/Comunicação (Horta).',
+          'Sistema Totalmente Compensatório, impedindo o paciente de falar ou participar.',
+          'Ignorar a ansiedade, pois em UTI apenas parâmetros cardíacos importam.',
+          'Alta imediata sem orientações de prevenção secundária.'
+        ],
+        correct: 0,
+        rationale: 'Muito bem! Mesmo na UTI, pacientes lúcidos demandam cuidado parcialmente compensatório e suporte às necessidades psicossociais de segurança e informação.'
+      },
+      {
+        id: 'uti4',
+        bedCode: 'UTI-04',
+        name: 'Júlia Monteiro',
+        age: 26,
+        gender: 'F',
+        hair: '#7c2d12',
+        blanket: '#818cf8',
+        isMechanicalVentilation: false,
+        diagnosis: 'Cetoacidose Diabética Grave (em Bomba de Insulina EV)',
+        vitals: 'PA: 102x64 mmHg | FC: 112 bpm | FR: 28 irpm (Kussmaul) | HGT: 410 mg/dL',
+        history: 'Admitida por descompensação grave de DM1. Recebendo hidratação venosa vigorosa, reposição de potássio e insulinoterapia contínua com controle glicêmico horário.',
+        seminarFocus: 'UTI • Requisitos de Desvio de Saúde & Equilíbrio Hidroeletrolítico',
+        question: 'Na Cetoacidose Diabética em UTI, qual necessidade psicobiológica de Horta e qual conceito de Orem estão em foco?',
+        options: [
+          'NHB de Hidratação e Regulação Hormonal/Eletrolítica (Horta) e Demanda Terapêutica de Desvio de Saúde que excede temporariamente a agência da paciente (Orem).',
+          'NHB de Recreação (Horta) e Requisito de Desenvolvimento (Orem).',
+          'Ausência de déficit de autocuidado.',
+          'Exclusivamente necessidade de locomoção.'
+        ],
+        correct: 0,
+        rationale: 'Exato! A cetoacidose exige correção intensiva hidroeletrolítica e glicêmica, suprindo temporariamente a agência da paciente.'
+      },
+      {
+        id: 'uti5',
+        bedCode: 'UTI-05',
+        name: 'Sr. Augusto Cezar',
+        age: 60,
+        gender: 'M',
+        hair: '#64748b',
+        blanket: '#2dd4bf',
+        isMechanicalVentilation: false,
+        diagnosis: 'Pós-operatório de Neurocirurgia (Exérese de Meningioma)',
+        vitals: 'PA: 128x76 mmHg | FC: 74 bpm | Pupilas isocóricas fotorreagentes | Glasgow: 15',
+        history: 'Em monitorização neurológica horária, curativo cefálico limpo e seco. Relata desconforto com o barulho contínuo dos alarmes da UTI e privação de sono.',
+        seminarFocus: 'UTI • Ambiente Terapêutico e Sono/Repouso',
+        question: 'O ruído e a iluminação contínua da UTI prejudicam o sono do Sr. Augusto. Como as duas teorias analisam essa situação?',
+        options: [
+          'Para Horta, o Ambiente desequilibrado afeta a NHB Psicobiológica de Sono e Repouso; para Orem, o repouso é um Requisito Universal de Autocuidado que o ambiente hospitalar deve favorecer.',
+          'O sono não é considerado uma necessidade básica nem requisito universal.',
+          'Apenas medicamentos sedativos resolvem problemas ambientais na UTI.',
+          'O ambiente da UTI não interfere na recuperação neurológica.'
+        ],
+        correct: 0,
+        rationale: 'Excelente síntese! Tanto o Sono/Repouso (NHB de Horta) quanto o equilíbrio atividade/repouso (Requisito Universal de Orem) são afetados pelo ambiente da UTI.'
+      }
+    ];
+
+    // =========================================================================
+    // 4. ESTRUTURA DOS 5 MAPAS INTERLIGADOS POR PORTAS
+    // =========================================================================
+    const TILE = 48;
+
+    // Utilitário para embaralhar arrays
+    function shuffleArray(arr) {
+      const copy = [...arr];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    // Estado Global do Jogo
+    const game = {
+      started: false,
+      modalOpen: false,
+      avatar: 'F',
+      playerName: 'Estagiário(a)',
+      currentMapId: 'reception',
+      player: {
+        x: 11 * TILE,
+        y: 12 * TILE,
+        dir: 'up',
+        frame: 0,
+        animTimer: 0,
+        speed: 235
+      },
+      // Pacientes sorteados na partida atual
+      wardPatients: {
+        orem: [], // 10 leitos
+        horta: [], // 10 leitos
+        uti: [] // 5 leitos
+      },
+      // Progresso
+      completedBeds: {}, // { 'orem_0': true, ... }
+      score: 0,
+      totalQuestionsAnswered: 0,
+      correctQuestionsCount: 0,
+      // Missão Secundária 1: Estetoscópio Littmann
+      littmannMission: {
+        started: false,
+        vitalsChecked: {}, // { 'orem_0': true, 'horta_0': true, 'uti_0': true }
+        unlocked: false
+      },
+      // Missão Secundária 2: Prescrições de Enfermagem
+      prescriptionsDone: {}, // { 'orem_10': true, 'horta_9': true, 'uti_0': true }
+      // Avaliação Final na Coordenação
+      finalExamPassed: false,
+      finalExamStep: 0,
+      // NPCs acompanhantes dinâmicos na recepção
+      companions: [],
+      nearestInteractable: null
+    };
+
+    // Inicializar sorteio de pacientes da partida
+    function initializeRandomizedPatients() {
+      const selectedOrem = shuffleArray(POOL_OREM).slice(0, 10);
+      const selectedHorta = shuffleArray(POOL_HORTA).slice(0, 10);
+      // Na UTI garantimos os 5 casos (incluindo UTI-01 em Ventilação Mecânica) e embaralhamos a ordem dos leitos 2 a 5
+      const utiVMI = POOL_UTI[0];
+      const utiOthers = shuffleArray(POOL_UTI.slice(1));
+      const selectedUTI = [utiVMI, ...utiOthers];
+
+      game.wardPatients.orem = selectedOrem.map((p, idx) => ({
+        ...p,
+        bedKey: `orem_${idx}`,
+        bedLabel: `Leito ${String(idx + 1).padStart(2, '0')}`,
+        wing: 'orem',
+        // Garante ao menos 1 tarefa de prescrição na ala Orem
+        hasPrescriptionTask: p.hasPrescriptionTask || idx === 2
+      }));
+
+      game.wardPatients.horta = selectedHorta.map((p, idx) => ({
+        ...p,
+        bedKey: `horta_${idx}`,
+        bedLabel: `Leito ${String(idx + 11).padStart(2, '0')}`,
+        wing: 'horta',
+        hasPrescriptionTask: p.hasPrescriptionTask || idx === 1
+      }));
+
+      game.wardPatients.uti = selectedUTI.map((p, idx) => ({
+        ...p,
+        bedKey: `uti_${idx}`,
+        bedLabel: `UTI-0${idx + 1}`,
+        wing: 'uti',
+        hasPrescriptionTask: p.hasPrescriptionTask || idx === 0
+      }));
+
+      // Garantir que as tarefas de prescrição tenham dados válidos caso sorteadas por índice
+      game.wardPatients.orem.forEach(p => {
+        if (p.hasPrescriptionTask && !p.rxScenario) {
+          p.rxScenario = `Paciente ${p.name} (${p.diagnosis}). Elabore a prescrição de enfermagem alinhada à Teoria do Autocuidado de Orem.`;
+          p.rxOptions = [
+            { text: 'Avaliar capacidade de autocuidado, treinar técnica segura com supervisão e registrar evolução (Sistema Apoio-Educação/Parcial)', correct: true },
+            { text: 'Delegar toda a responsabilidade terapêutica ao paciente sem avaliar sua compreensão', correct: false },
+            { text: 'Suspender orientações educativas durante toda a internação', correct: false }
+          ];
+        }
+      });
+
+      game.wardPatients.horta.forEach(p => {
+        if (p.hasPrescriptionTask && !p.rxScenario) {
+          p.rxScenario = `Paciente ${p.name} (${p.diagnosis}). Monte o Plano de Cuidados (Prescrição de Enfermagem) segundo Wanda Horta.`;
+          p.rxOptions = [
+            { text: 'Monitorar sinais vitais e NHB prioritária afetada, executar cuidados aprazados (M/T/N) e registrar Evolução em 24h', correct: true },
+            { text: 'Pular o Histórico e o Diagnóstico de Enfermagem aplicando conduta genérica sem aprazamento', correct: false },
+            { text: 'Restringir visita familiar e ignorar queixas emocionais ou espirituais', correct: false }
+          ];
+        }
+      });
+    }
+
+    // Definição das Salas / Mapas
+    // Tile types:
+    // 0: Piso Recepção (Bege claro texturizado)
+    // 1: Parede Externa 3D
+    // 2: Piso Ala Orem (Azul claro clínico)
+    // 3: Piso Ala Horta (Verde menta clínico)
+    // 4: Piso UTI (Azul técnico profundo claro)
+    // 5: Piso Sala Coordenação (Madeira vinílica elegante)
+    // 6: Tapete decorativo
+    const MAPS = {};
+
+    function buildAllMaps() {
+      // 1. MAPA RECEPÇÃO & SALA DE ESPERA (22 x 16)
+      {
+        const cols = 22, rows = 16;
+        const grid = Array.from({ length: rows }, (_, r) =>
+          Array.from({ length: cols }, (_, c) => {
+            if (r === 0 || r === rows - 1 || c === 0 || c === cols - 1) return 1;
+            if (r >= 11 && r <= 14 && c >= 9 && c <= 12) return 6;
+            return 0;
+          })
+        );
+
+        MAPS.reception = {
+          id: 'reception',
+          name: 'Recepção & Sala de Espera',
+          icon: '🏥',
+          cols,
+          rows,
+          floorType: 0,
+          grid,
+          doors: [
+            {
+              x: 1 * TILE, y: 7.5 * TILE, w: 0.7 * TILE, h: 2 * TILE,
+              targetMap: 'ward_orem', spawnX: 25.5 * TILE, spawnY: 7.5 * TILE, spawnDir: 'left',
+              label: '◀ ALA OREM (10 Leitos)', color: '#0284c7', orientation: 'west'
+            },
+            {
+              x: 20.3 * TILE, y: 7.5 * TILE, w: 0.7 * TILE, h: 2 * TILE,
+              targetMap: 'ward_horta', spawnX: 2.5 * TILE, spawnY: 7.5 * TILE, spawnDir: 'right',
+              label: 'ALA HORTA (10 Leitos) ▶', color: '#059669', orientation: 'east'
+            },
+            {
+              x: 5 * TILE, y: 1 * TILE, w: 2.4 * TILE, h: 0.7 * TILE,
+              targetMap: 'uti', spawnX: 11 * TILE, spawnY: 12.2 * TILE, spawnDir: 'up',
+              label: '▲ UTI (5 Leitos)', color: '#0369a1', orientation: 'north'
+            },
+            {
+              x: 14.5 * TILE, y: 1 * TILE, w: 2.6 * TILE, h: 0.7 * TILE,
+              targetMap: 'coordination', spawnX: 8 * TILE, spawnY: 10.2 * TILE, spawnDir: 'up',
+              label: '▲ COORDENAÇÃO', color: '#b45309', orientation: 'north'
+            }
+          ],
+          solids: [
+            // Balcão da Recepção
+            { x: 8.5 * TILE, y: 4.2 * TILE, w: 5 * TILE, h: 1.1 * TILE, type: 'counter', label: 'RECEPÇÃO CENTRAL', color: '#0f766e' },
+            // Fileiras de Cadeiras da Sala de Espera (Esquerda e Direita)
+            { x: 2.8 * TILE, y: 11 * TILE, w: 3.6 * TILE, h: 0.9 * TILE, type: 'chairs', seats: 4 },
+            { x: 2.8 * TILE, y: 13 * TILE, w: 3.6 * TILE, h: 0.9 * TILE, type: 'chairs', seats: 4 },
+            { x: 15.6 * TILE, y: 11 * TILE, w: 3.6 * TILE, h: 0.9 * TILE, type: 'chairs', seats: 4 },
+            { x: 15.6 * TILE, y: 13 * TILE, w: 3.6 * TILE, h: 0.9 * TILE, type: 'chairs', seats: 4 },
+            // Bebedouro e Plantas
+            { x: 2.2 * TILE, y: 2.2 * TILE, w: 0.9 * TILE, h: 0.9 * TILE, type: 'plant' },
+            { x: 18.8 * TILE, y: 2.2 * TILE, w: 0.9 * TILE, h: 0.9 * TILE, type: 'plant' },
+            { x: 13.7 * TILE, y: 4.2 * TILE, w: 0.8 * TILE, h: 0.9 * TILE, type: 'water' }
+          ],
+          npcs: [
+            {
+              id: 'receptionist',
+              x: 11 * TILE, y: 3.4 * TILE, radius: 75,
+              name: 'Recepcionista Clara',
+              role: 'receptionist',
+              coat: '#0d9488', hair: '#7c2d12',
+              badge: '💬'
+            },
+            {
+              id: 'preceptor_littmann',
+              x: 4.2 * TILE, y: 4.2 * TILE, radius: 62,
+              name: 'Enf. Preceptor Dr. Rafael (Missão Littmann)',
+              role: 'littmann_quest',
+              coat: '#ffffff', hair: '#1e293b',
+              badge: '🩺'
+            },
+            // Acompanhantes sentados nas cadeiras
+            {
+              id: 'comp_seated_1',
+              x: 3.3 * TILE, y: 11.2 * TILE, radius: 48,
+              name: 'Acompanhante Dona Lúcia',
+              role: 'companion',
+              seated: true,
+              shirt: '#f59e0b', hair: '#94a3b8',
+              dialogue: '“Estou aguardando notícias do meu esposo na Ala Orem. A enfermeira explicou que ele está aprendendo a cuidar do próprio curativo antes da alta!”'
+            },
+            {
+              id: 'comp_seated_2',
+              x: 5.1 * TILE, y: 13.2 * TILE, radius: 48,
+              name: 'Acompanhante Sr. Pedro',
+              role: 'companion',
+              seated: true,
+              shirt: '#3b82f6', hair: '#334155',
+              dialogue: '“Fiquei admirado com a equipe da Ala Wanda Horta: eles não olham só o exame, perguntam como está o sono, a família e até a fé da minha mãe.”'
+            },
+            {
+              id: 'comp_seated_3',
+              x: 16.2 * TILE, y: 11.2 * TILE, radius: 48,
+              name: 'Acompanhante Mariana',
+              role: 'companion',
+              seated: true,
+              shirt: '#ec4899', hair: '#7c2d12',
+              dialogue: '“Meu pai está na UTI ali no corredor norte-oeste. Os monitores apitam o tempo todo, mas a enfermagem nos mantém sempre informados.”'
+            }
+          ]
+        };
+
+        // Acompanhantes caminhando pela sala de espera
+        game.companions = [
+          {
+            id: 'walker_1',
+            name: 'Acompanhante Tiago',
+            x: 10.5 * TILE, y: 8.5 * TILE,
+            minX: 7.5 * TILE, maxX: 14.5 * TILE,
+            vx: 55, vy: 0, dir: 'right', frame: 0, timer: 0,
+            shirt: '#6366f1', hair: '#1e293b',
+            dialogue: '“Você é o(a) estagiário(a) novo(a)? Vi o Preceptor Dr. Rafael ali perto da recepção procurando alguém para ajudar na triagem com o Estetoscópio Littmann!”'
+          },
+          {
+            id: 'walker_2',
+            name: 'Acompanhante Sônia',
+            x: 14 * TILE, y: 12.2 * TILE,
+            minX: 8 * TILE, maxX: 14.5 * TILE,
+            vx: -48, vy: 0, dir: 'left', frame: 0, timer: 0,
+            shirt: '#14b8a6', hair: '#92400e',
+            dialogue: '“A Coordenadora de Enfermagem está na sala ao norte-leste avaliando os seminários dos estagiários. Boa sorte!”'
+          }
+        ];
+      }
+
+      // 2. MAPA ALA DOROTHEA OREM — 10 LEITOS (28 x 15)
+      {
+        const cols = 28, rows = 15;
+        const grid = Array.from({ length: rows }, (_, r) =>
+          Array.from({ length: cols }, (_, c) => (r === 0 || r === rows - 1 || c === 0 || c === cols - 1 ? 1 : 2))
+        );
+
+        const solids = [
+          { x: 12.2 * TILE, y: 6.8 * TILE, w: 3.6 * TILE, h: 1.1 * TILE, type: 'counter', label: 'POSTO ALA OREM', color: '#0369a1' }
+        ];
+        const beds = [];
+
+        // 5 Leitos Superiores (Leitos 01 a 05) + 5 Leitos Inferiores (Leitos 06 a 10)
+        for (let i = 0; i < 10; i++) {
+          const isTop = i < 5;
+          const colIdx = isTop ? i : i - 5;
+          const bx = (3.2 + colIdx * 4.5) * TILE;
+          const by = isTop ? 2.1 * TILE : 11.2 * TILE;
+          const pat = game.wardPatients.orem[i];
+
+          solids.push({
+            x: bx, y: by, w: 2.3 * TILE, h: 1.4 * TILE,
+            type: 'bed', patient: pat
+          });
+
+          beds.push({
+            patientIndex: i,
+            wing: 'orem',
+            x: bx + 1.15 * TILE,
+            y: isTop ? by + 1.9 * TILE : by - 0.55 * TILE,
+            radius: 56
+          });
+        }
+
+        MAPS.ward_orem = {
+          id: 'ward_orem',
+          name: 'Enfermaria Dorothea E. Orem (10 Leitos)',
+          icon: '📘',
+          cols,
+          rows,
+          floorType: 2,
+          grid,
+          doors: [
+            {
+              x: 26.3 * TILE, y: 6.5 * TILE, w: 0.7 * TILE, h: 2 * TILE,
+              targetMap: 'reception', spawnX: 2.5 * TILE, spawnY: 8.5 * TILE, spawnDir: 'right',
+              label: 'RECEPÇÃO ▶', color: '#0f766e', orientation: 'east'
+            }
+          ],
+          solids,
+          beds,
+          npcs: [
+            {
+              id: 'npc_orem_prof',
+              x: 14 * TILE, y: 5.9 * TILE, radius: 64,
+              name: 'Profa. Dorothea Orem (Preceptoria)',
+              role: 'theory_guide_orem',
+              coat: '#ffffff', hair: '#64748b',
+              badge: '📘'
+            }
+          ]
+        };
+      }
+
+      // 3. MAPA ALA WANDA DE A. HORTA — 10 LEITOS (28 x 15)
+      {
+        const cols = 28, rows = 15;
+        const grid = Array.from({ length: rows }, (_, r) =>
+          Array.from({ length: cols }, (_, c) => (r === 0 || r === rows - 1 || c === 0 || c === cols - 1 ? 1 : 3))
+        );
+
+        const solids = [
+          { x: 12.2 * TILE, y: 6.8 * TILE, w: 3.6 * TILE, h: 1.1 * TILE, type: 'counter', label: 'POSTO ALA HORTA', color: '#047857' }
+        ];
+        const beds = [];
+
+        for (let i = 0; i < 10; i++) {
+          const isTop = i < 5;
+          const colIdx = isTop ? i : i - 5;
+          const bx = (3.2 + colIdx * 4.5) * TILE;
+          const by = isTop ? 2.1 * TILE : 11.2 * TILE;
+          const pat = game.wardPatients.horta[i];
+
+          solids.push({
+            x: bx, y: by, w: 2.3 * TILE, h: 1.4 * TILE,
+            type: 'bed', patient: pat
+          });
+
+          beds.push({
+            patientIndex: i,
+            wing: 'horta',
+            x: bx + 1.15 * TILE,
+            y: isTop ? by + 1.9 * TILE : by - 0.55 * TILE,
+            radius: 56
+          });
+        }
+
+        MAPS.ward_horta = {
+          id: 'ward_horta',
+          name: 'Enfermaria Wanda de A. Horta (10 Leitos)',
+          icon: '📗',
+          cols,
+          rows,
+          floorType: 3,
+          grid,
+          doors: [
+            {
+              x: 1 * TILE, y: 6.5 * TILE, w: 0.7 * TILE, h: 2 * TILE,
+              targetMap: 'reception', spawnX: 19.5 * TILE, spawnY: 8.5 * TILE, spawnDir: 'left',
+              label: '◀ RECEPÇÃO', color: '#0f766e', orientation: 'west'
+            }
+          ],
+          solids,
+          beds,
+          npcs: [
+            {
+              id: 'npc_horta_prof',
+              x: 14 * TILE, y: 5.9 * TILE, radius: 64,
+              name: 'Profa. Wanda Horta (Preceptoria)',
+              role: 'theory_guide_horta',
+              coat: '#ffffff', hair: '#1e293b',
+              badge: '📗'
+            }
+          ]
+        };
+      }
+
+      // 4. MAPA UTI — 5 LEITOS DE ALTA COMPLEXIDADE (22 x 14)
+      {
+        const cols = 22, rows = 14;
+        const grid = Array.from({ length: rows }, (_, r) =>
+          Array.from({ length: cols }, (_, c) => (r === 0 || r === rows - 1 || c === 0 || c === cols - 1 ? 1 : 4))
+        );
+
+        const solids = [
+          { x: 8.5 * TILE, y: 7.4 * TILE, w: 5 * TILE, h: 1.1 * TILE, type: 'counter', label: 'CENTRAL DE MONITORIZAÇÃO UTI', color: '#0369a1' }
+        ];
+        const beds = [];
+
+        // 5 Leitos de UTI dispostos em arco/linha superior para visualização clara dos monitores e ventilador mecânico
+        for (let i = 0; i < 5; i++) {
+          const bx = (2.3 + i * 3.8) * TILE;
+          const by = 2.3 * TILE;
+          const pat = game.wardPatients.uti[i];
+
+          solids.push({
+            x: bx, y: by, w: 2.3 * TILE, h: 1.5 * TILE,
+            type: 'bed', patient: pat
+          });
+
+          beds.push({
+            patientIndex: i,
+            wing: 'uti',
+            x: bx + 1.15 * TILE,
+            y: by + 2.0 * TILE,
+            radius: 58
+          });
+        }
+
+        MAPS.uti = {
+          id: 'uti',
+          name: 'Unidade de Terapia Intensiva — UTI (5 Leitos)',
+          icon: '🫀',
+          cols,
+          rows,
+          floorType: 4,
+          grid,
+          doors: [
+            {
+              x: 9.8 * TILE, y: 12.3 * TILE, w: 2.4 * TILE, h: 0.7 * TILE,
+              targetMap: 'reception', spawnX: 6.2 * TILE, spawnY: 2.5 * TILE, spawnDir: 'down',
+              label: '▼ VOLTAR À RECEPÇÃO', color: '#0f766e', orientation: 'south'
+            }
+          ],
+          solids,
+          beds,
+          npcs: [
+            {
+              id: 'npc_uti_intensivist',
+              x: 11 * TILE, y: 6.5 * TILE, radius: 64,
+              name: 'Enf. Intensivista Camila (UTI)',
+              role: 'uti_guide',
+              coat: '#0284c7', hair: '#475569',
+              badge: '🫀'
+            }
+          ]
+        };
+      }
+
+      // 5. MAPA SALA DA COORDENAÇÃO DE ENFERMAGEM (16 x 12)
+      {
+        const cols = 16, rows = 12;
+        const grid = Array.from({ length: rows }, (_, r) =>
+          Array.from({ length: cols }, (_, c) => (r === 0 || r === rows - 1 || c === 0 || c === cols - 1 ? 1 : 5))
+        );
+
+        MAPS.coordination = {
+          id: 'coordination',
+          name: 'Sala da Coordenação de Enfermagem',
+          icon: '🎓',
+          cols,
+          rows,
+          floorType: 5,
+          grid,
+          doors: [
+            {
+              x: 6.8 * TILE, y: 10.3 * TILE, w: 2.4 * TILE, h: 0.7 * TILE,
+              targetMap: 'reception', spawnX: 15.8 * TILE, spawnY: 2.5 * TILE, spawnDir: 'down',
+              label: '▼ VOLTAR À RECEPÇÃO', color: '#0f766e', orientation: 'south'
+            }
+          ],
+          solids: [
+            // Mesa Executiva da Coordenadora
+            { x: 5.5 * TILE, y: 3.8 * TILE, w: 5 * TILE, h: 1.2 * TILE, type: 'woodDesk', label: 'COORDENAÇÃO DE ENFERMAGEM', color: '#78350f' },
+            // Estantes de Livros Científicos
+            { x: 1.5 * TILE, y: 1.3 * TILE, w: 3 * TILE, h: 0.9 * TILE, type: 'bookshelf' },
+            { x: 11.5 * TILE, y: 1.3 * TILE, w: 3 * TILE, h: 0.9 * TILE, type: 'bookshelf' },
+            // Plantas
+            { x: 1.5 * TILE, y: 9.2 * TILE, w: 0.9 * TILE, h: 0.9 * TILE, type: 'plant' },
+            { x: 13.6 * TILE, y: 9.2 * TILE, w: 0.9 * TILE, h: 0.9 * TILE, type: 'plant' }
+          ],
+          beds: [],
+          npcs: [
+            {
+              id: 'coordinator_npc',
+              x: 8 * TILE, y: 2.9 * TILE, radius: 78,
+              name: 'Profa. Dra. Helena (Coordenadora de Enfermagem)',
+              role: 'coordinator_exam',
+              coat: '#ffffff', hair: '#7c2d12',
+              badge: '🎓'
+            }
+          ]
+        };
+      }
+    }
+
+    // =========================================================================
+    // 5. PERGUNTAS DA COORDENADORA DE ENFERMAGEM (AVALIAÇÃO FINAL DO SEMINÁRIO)
+    // =========================================================================
+    const COORDINATOR_EXAM_QUESTIONS = [
+      {
+        topic: 'Tópicos 1 e 2 • Autoras, Contexto e Classificação',
+        question: 'Sobre a origem histórica e classificação epistemológica das duas teorias estudadas no seminário, qual afirmação está correta?',
+        options: [
+          'Orem (EUA, anos 1950-70) formulou uma Grande Teoria articulada em 3 subteorias focadas no autocuidado; Horta (Brasil, anos 1960-70) desenvolveu um Modelo Conceitual/Grande Teoria fundamentado em Maslow e João Mohana sobre as Necessidades Humanas Básicas.',
+          'Ambas foram desenvolvidas no Brasil na década de 1990 como protocolos técnicos exclusivos de UTI.',
+          'Wanda Horta criou a Teoria do Déficit de Autocuidado nos EUA, enquanto Dorothea Orem formulou as 6 etapas do Processo de Enfermagem no Brasil.',
+          'São teorias de médio alcance restritas apenas à saúde mental comunitária.'
+        ],
+        correct: 0,
+        explanation: 'Excelente! Você dominou o contexto histórico e a classificação epistemológica de ambas as teóricas.'
+      },
+      {
+        topic: 'Tópico 3 • Conexão Dinâmica entre Conceitos',
+        question: 'Como os conceitos centrais de Dorothea Orem e Wanda Horta se conectam operacionalmente na prática clínica?',
+        options: [
+          'Em Orem, quando a Demanda Terapêutica supera a Agência de Autocuidado surge o Déficit, que determina um dos 3 Sistemas de Enfermagem; em Horta, o desequilíbrio homeodinâmico gera NHBs afetadas (Psicobiológicas, Psicossociais e Psicoespirituais) abordadas pelas 6 etapas do Processo de Enfermagem.',
+          'Em Orem, o enfermeiro sempre faz tudo pelo paciente; em Horta, as 6 etapas são aplicadas apenas se o paciente não tiver família.',
+          'Ambas eliminam a necessidade de diagnóstico e planejamento de enfermagem.',
+          'Em Horta, as necessidades psicoespirituais são atendidas antes da oxigenação em paradas cardiorrespiratórias.'
+        ],
+        correct: 0,
+        explanation: 'Perfeito! Você demonstrou como os conceitos se articulam dinamicamente, sem apenas decorar listas.'
+      },
+      {
+        topic: 'Tópico 4 • Metaparadigma (Pessoa, Saúde, Ambiente e Enfermagem)',
+        question: 'Comparando o Metaparadigma da Enfermagem nas duas teorias, onde recai a maior ênfase de cada autora?',
+        options: [
+          'Orem enfatiza a Pessoa (como agente deliberado de autocuidado) e a Enfermagem (como sistema compensatório/educativo); Horta enfatiza a Pessoa (ser holístico indivisível) e a Saúde (equilíbrio dinâmico / homeodinâmica em interação com o Ambiente).',
+          'Ambas enfatizam exclusivamente o ambiente físico hospitalar, ignorando o papel ativo da pessoa.',
+          'Orem define saúde como desequilíbrio constante, enquanto Horta define pessoa como organismo puramente biológico.',
+          'Nenhuma das duas teorias aborda os quatro conceitos do metaparadigma.'
+        ],
+        correct: 0,
+        explanation: 'Brilhante! A análise comparativa do metaparadigma é essencial para fundamentar a escolha teórica na assistência.'
+      },
+      {
+        topic: 'Tópicos 5, 6 e 7 • Aplicação Clínica, Limites, Cultura e Fontes',
+        question: 'Sobre os limites, adequação cultural e fundamentação científica dessas teorias na prática brasileira, assinale a análise mais completa:',
+        options: [
+          'Orem destaca-se em doenças crônicas/reabilitação, mas exige adaptar metas à cultura/escolaridade e tem limites em pacientes sedados; Horta estrutura a SAE no Brasil (Processo de Enfermagem, 1979), mas enfrenta sobrecarga burocrática nas 6 etapas e subjetividade na avaliação espiritual.',
+          'Nenhuma das teorias possui limites ou dificuldades de aplicação em qualquer cenário clínico.',
+          'Blogs sem referências são suficientes para fundamentar a prescrição de enfermagem.',
+          'A cultura e as preferências do paciente devem ser desconsideradas para manter a padronização.'
+        ],
+        correct: 0,
+        explanation: 'Excelente conclusão crítica! Você integrou teoria, prática clínica, limites epistemológicos e rigor científico.'
+      }
+    ];
+
+    // =========================================================================
+    // 6. TEXTURAS PROCEDURAIS PIXEL-ART (OFFSCREEN CANVASES)
+    // =========================================================================
+    const textures = {};
+
+    function generateProceduralTextures() {
+      // Função auxiliar para criar tile 48x48 texturizado
+      function makeFloorTile(baseColor, lineColor, accentColor, speckle = true) {
+        const c = document.createElement('canvas');
+        c.width = TILE;
+        c.height = TILE;
+        const g = c.getContext('2d');
+
+        g.fillStyle = baseColor;
+        g.fillRect(0, 0, TILE, TILE);
+
+        // Divisão de placas cerâmicas 2x2 dentro do tile
+        g.strokeStyle = lineColor;
+        g.lineWidth = 1;
+        g.strokeRect(0.5, 0.5, TILE / 2 - 1, TILE / 2 - 1);
+        g.strokeRect(TILE / 2 + 0.5, 0.5, TILE / 2 - 1, TILE / 2 - 1);
+        g.strokeRect(0.5, TILE / 2 + 0.5, TILE / 2 - 1, TILE / 2 - 1);
+        g.strokeRect(TILE / 2 + 0.5, TILE / 2 + 0.5, TILE / 2 - 1, TILE / 2 - 1);
+
+        // Brilho sutil de porcelanato
+        g.fillStyle = accentColor;
+        g.fillRect(3, 3, 6, 2);
+        g.fillRect(TILE / 2 + 3, TILE / 2 + 3, 6, 2);
+
+        if (speckle) {
+          g.fillStyle = 'rgba(15, 23, 42, 0.04)';
+          g.fillRect(10, 14, 2, 2);
+          g.fillRect(34, 8, 2, 2);
+          g.fillRect(16, 38, 2, 2);
+          g.fillRect(40, 32, 2, 2);
+        }
+        return c;
+      }
+
+      // 0: Recepção (Porcelanato creme/arenito)
+      textures.floor0 = makeFloorTile('#f5f3eb', '#e2ddd0', 'rgba(255,255,255,0.65)');
+      // 2: Ala Orem (Cerâmica azul glacial)
+      textures.floor2 = makeFloorTile('#e0f2fe', '#bae6fd', 'rgba(255,255,255,0.7)');
+      // 3: Ala Horta (Cerâmica verde menta)
+      textures.floor3 = makeFloorTile('#dcfce7', '#bbf7d0', 'rgba(255,255,255,0.7)');
+      // 4: UTI (Piso vinílico técnico azulado)
+      textures.floor4 = makeFloorTile('#dbeafe', '#93c5fd', 'rgba(255,255,255,0.55)');
+
+      // 5: Piso Madeira Sala Coordenação
+      {
+        const c = document.createElement('canvas');
+        c.width = TILE;
+        c.height = TILE;
+        const g = c.getContext('2d');
+        g.fillStyle = '#d6b88d';
+        g.fillRect(0, 0, TILE, TILE);
+        g.fillStyle = '#c8a675';
+        g.fillRect(0, 12, TILE, 11);
+        g.fillRect(0, 36, TILE, 11);
+        g.strokeStyle = '#9c7a4c';
+        g.lineWidth = 1;
+        for (let y = 0; y <= TILE; y += 12) {
+          g.beginPath();
+          g.moveTo(0, y + 0.5);
+          g.lineTo(TILE, y + 0.5);
+          g.stroke();
+        }
+        g.beginPath();
+        g.moveTo(24, 0); g.lineTo(24, 12);
+        g.moveTo(12, 12); g.lineTo(12, 24);
+        g.moveTo(36, 24); g.lineTo(36, 36);
+        g.stroke();
+        textures.floor5 = c;
+      }
+
+      // 1: Parede 3D Top-Down Texturizada com Tijolos/Painel e Rodapé
+      {
+        const c = document.createElement('canvas');
+        c.width = TILE;
+        c.height = TILE;
+        const g = c.getContext('2d');
+        // Topo da parede (profundidade)
+        g.fillStyle = '#1e293b';
+        g.fillRect(0, 0, TILE, 16);
+        g.fillStyle = '#334155';
+        g.fillRect(2, 2, TILE - 4, 12);
+        // Face frontal da parede
+        g.fillStyle = '#475569';
+        g.fillRect(0, 16, TILE, 26);
+        // Textura de alvenaria sutil
+        g.fillStyle = '#3e4c5e';
+        g.fillRect(4, 20, 18, 8);
+        g.fillRect(26, 20, 18, 8);
+        g.fillRect(14, 30, 20, 8);
+        // Rodapé hospitalar
+        g.fillStyle = '#0f172a';
+        g.fillRect(0, 42, TILE, 6);
+        textures.wall = c;
+      }
+    }
+
+    // =========================================================================
+    // 7. CONTROLES, MOVIMENTAÇÃO E TRANSIÇÃO ENTRE PORTAS
+    // =========================================================================
+    const keys = {};
+    window.addEventListener('keydown', (e) => {
+      keys[e.key] = true;
+      if (!game.started) return;
+
+      if ((e.key === ' ' || e.key === 'e' || e.key === 'E' || e.key === 'Enter') && !game.modalOpen) {
+        e.preventDefault();
+        triggerInteraction();
+      }
+      if ((e.key === 'p' || e.key === 'P') && !game.modalOpen) {
+        e.preventDefault();
+        openClipboardModal('orem');
+      }
+      if (e.key === 'Escape' && game.modalOpen) {
+        closeClinicalModal();
+        closeClipboardModal();
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      keys[e.key] = false;
+    });
+
+    function bindDpad(id, key) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const down = (e) => { e.preventDefault(); initAudio(); keys[key] = true; };
+      const up = (e) => { e.preventDefault(); keys[key] = false; };
+      el.addEventListener('touchstart', down, { passive: false });
+      el.addEventListener('touchend', up, { passive: false });
+      el.addEventListener('mousedown', down);
+      el.addEventListener('mouseup', up);
+      el.addEventListener('mouseleave', up);
+    }
+    bindDpad('btnUp', 'ArrowUp');
+    bindDpad('btnDown', 'ArrowDown');
+    bindDpad('btnLeft', 'ArrowLeft');
+    bindDpad('btnRight', 'ArrowRight');
+
+    function selectAvatar(av) {
+      game.avatar = av;
+      document.getElementById('cardAvatarF').className = av === 'F'
+        ? 'border-2 border-teal-600 bg-teal-50 rounded-2xl p-3 flex items-center gap-2.5 text-left transition'
+        : 'border-2 border-slate-200 hover:border-slate-300 bg-white rounded-2xl p-3 flex items-center gap-2.5 text-left transition';
+      document.getElementById('cardAvatarM').className = av === 'M'
+        ? 'border-2 border-sky-600 bg-sky-50 rounded-2xl p-3 flex items-center gap-2.5 text-left transition'
+        : 'border-2 border-slate-200 hover:border-slate-300 bg-white rounded-2xl p-3 flex items-center gap-2.5 text-left transition';
+    }
+
+    function startGame() {
+      initAudio();
+      sfxSuccess();
+      const rawName = document.getElementById('inputPlayerName').value.trim();
+      game.playerName = rawName || (game.avatar === 'F' ? 'Acadêmica de Enfermagem' : 'Acadêmico de Enfermagem');
+
+      generateProceduralTextures();
+      initializeRandomizedPatients();
+      buildAllMaps();
+
+      game.started = true;
+      document.getElementById('startScreen').classList.add('hidden');
+      document.getElementById('hud').classList.remove('hidden');
+      document.getElementById('mobileControls').classList.remove('hidden');
+
+      updateHUD();
+      showToast(`Bem-vindo(a), ${game.playerName}! Fale com a Recepcionista ou explore as portas das enfermarias.`);
+    }
+
+    function showToast(msg) {
+      const box = document.getElementById('toastBox');
+      box.textContent = msg;
+      box.classList.remove('hidden');
+      clearTimeout(window._toastTimeout);
+      window._toastTimeout = setTimeout(() => box.classList.add('hidden'), 4500);
+    }
+
+    function updateHUD() {
+      const mapObj = MAPS[game.currentMapId];
+      if (mapObj) {
+        document.getElementById('hudSectorIcon').textContent = mapObj.icon;
+        document.getElementById('hudSectorName').textContent = mapObj.name;
+      }
+
+      const bedsCount = Object.keys(game.completedBeds).length;
+      document.getElementById('hudBedsText').textContent = `${bedsCount}/25`;
+      document.getElementById('hudBedsBar').style.width = `${(bedsCount / 25) * 100}%`;
+
+      // Missão Littmann
+      const vitalsCount = Object.keys(game.littmannMission.vitalsChecked).length;
+      const litBadge = document.getElementById('hudLittmannBadge');
+      const litText = document.getElementById('hudLittmannText');
+      if (game.littmannMission.unlocked) {
+        litBadge.className = 'px-2.5 py-1.5 rounded-xl bg-sky-900/80 border border-sky-400 text-sky-200 font-bold flex items-center gap-1.5';
+        litText.textContent = 'Littmann Equipado ✓';
+      } else {
+        litText.textContent = `Littmann: ${vitalsCount}/3`;
+      }
+
+      // Missão Prescrições
+      const rxCount = Object.keys(game.prescriptionsDone).length;
+      const rxBadge = document.getElementById('hudRxBadge');
+      const rxText = document.getElementById('hudRxText');
+      if (rxCount >= 3) {
+        rxBadge.className = 'px-2.5 py-1.5 rounded-xl bg-emerald-900/80 border border-emerald-400 text-emerald-200 font-bold flex items-center gap-1.5';
+      }
+      rxText.textContent = `Prescrições: ${rxCount}/3`;
+
+      document.getElementById('hudScore').textContent = `${game.score} pts`;
+    }
+
+    // Colisão com paredes e móveis
+    function collidesAt(nx, ny) {
+      const map = MAPS[game.currentMapId];
+      const hw = 13, hh = 13;
+
+      const corners = [
+        { c: Math.floor((nx - hw) / TILE), r: Math.floor((ny - hh) / TILE) },
+        { c: Math.floor((nx + hw) / TILE), r: Math.floor((ny - hh) / TILE) },
+        { c: Math.floor((nx - hw) / TILE), r: Math.floor((ny + hh) / TILE) },
+        { c: Math.floor((nx + hw) / TILE), r: Math.floor((ny + hh) / TILE) }
+      ];
+
+      for (const pt of corners) {
+        if (pt.r < 0 || pt.r >= map.rows || pt.c < 0 || pt.c >= map.cols) return true;
+        if (map.grid[pt.r][pt.c] === 1) return true;
+      }
+
+      for (const s of map.solids) {
+        if (nx + hw > s.x && nx - hw < s.x + s.w && ny + hh > s.y && ny - hh < s.y + s.h) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // Transição suave entre setores ao entrar em uma porta
+    let doorCooldown = 0;
+    function enterDoor(door) {
+      if (doorCooldown > 0) return;
+      doorCooldown = 0.6;
+      sfxDoor();
+      const fade = document.getElementById('doorFade');
+      fade.style.opacity = '1';
+
+      setTimeout(() => {
+        game.currentMapId = door.targetMap;
+        game.player.x = door.spawnX;
+        game.player.y = door.spawnY;
+        game.player.dir = door.spawnDir;
+        updateHUD();
+        fade.style.opacity = '0';
+      }, 180);
+    }
+
+    function updateSimulation(dt) {
+      if (!game.started || game.modalOpen) return;
+      if (doorCooldown > 0) doorCooldown -= dt;
+
+      const map = MAPS[game.currentMapId];
+
+      // Atualizar acompanhantes caminhando na recepção
+      if (game.currentMapId === 'reception') {
+        for (const w of game.companions) {
+          w.x += w.vx * dt;
+          if (w.x <= w.minX) { w.x = w.minX; w.vx = Math.abs(w.vx); w.dir = 'right'; }
+          if (w.x >= w.maxX) { w.x = w.maxX; w.vx = -Math.abs(w.vx); w.dir = 'left'; }
+          w.timer += dt;
+          if (w.timer > 0.18) { w.timer = 0; w.frame = (w.frame + 1) % 4; }
+        }
+      }
+
+      // Movimentação do Jogador
+      let vx = 0, vy = 0;
+      if (keys.ArrowUp || keys.w || keys.W) vy -= 1;
+      if (keys.ArrowDown || keys.s || keys.S) vy += 1;
+      if (keys.ArrowLeft || keys.a || keys.A) vx -= 1;
+      if (keys.ArrowRight || keys.d || keys.D) vx += 1;
+
+      if (vx !== 0 || vy !== 0) {
+        const len = Math.hypot(vx, vy);
+        vx /= len;
+        vy /= len;
+
+        if (Math.abs(vx) > Math.abs(vy)) game.player.dir = vx > 0 ? 'right' : 'left';
+        else game.player.dir = vy > 0 ? 'down' : 'up';
+
+        const nx = game.player.x + vx * game.player.speed * dt;
+        const ny = game.player.y + vy * game.player.speed * dt;
+
+        if (!collidesAt(nx, game.player.y)) game.player.x = nx;
+        if (!collidesAt(game.player.x, ny)) game.player.y = ny;
+
+        game.player.animTimer += dt;
+        if (game.player.animTimer > 0.13) {
+          game.player.animTimer = 0;
+          game.player.frame = (game.player.frame + 1) % 4;
+        }
+      } else {
+        game.player.frame = 0;
+      }
+
+      // Verificar se pisou em alguma Porta
+      for (const door of map.doors) {
+        const cx = door.x + door.w / 2;
+        const cy = door.y + door.h / 2;
+        if (Math.hypot(game.player.x - cx, game.player.y - cy) < 34) {
+          enterDoor(door);
+          return;
+        }
+      }
+
+      // Verificar proximidade com NPCs e Leitos
+      let closest = null;
+      let minDist = Infinity;
+
+      for (const npc of map.npcs) {
+        const d = Math.hypot(game.player.x - npc.x, game.player.y - npc.y);
+        if (d <= npc.radius && d < minDist) {
+          minDist = d;
+          closest = { kind: 'npc', data: npc, label: `${npc.name}` };
+        }
+      }
+
+      if (game.currentMapId === 'reception') {
+        for (const w of game.companions) {
+          const d = Math.hypot(game.player.x - w.x, game.player.y - w.y);
+          if (d <= 54 && d < minDist) {
+            minDist = d;
+            closest = { kind: 'walker', data: w, label: `${w.name}` };
+          }
+        }
+      }
+
+      if (map.beds) {
+        for (const bedSpot of map.beds) {
+          const d = Math.hypot(game.player.x - bedSpot.x, game.player.y - bedSpot.y);
+          if (d <= bedSpot.radius && d < minDist) {
+            const pat = game.wardPatients[bedSpot.wing][bedSpot.patientIndex];
+            minDist = d;
+            closest = {
+              kind: 'bed',
+              data: pat,
+              label: `${pat.bedLabel}: ${pat.name}${pat.isMechanicalVentilation ? ' [VMI]' : ''}`
+            };
+          }
+        }
+      }
+
+      game.nearestInteractable = closest;
+      const prompt = document.getElementById('interactPrompt');
+      if (closest) {
+        document.getElementById('interactPromptText').textContent = `${closest.label} • ESPAÇO / E`;
+        prompt.classList.remove('hidden');
+      } else {
+        prompt.classList.add('hidden');
+      }
+    }
+
+    // =========================================================================
+    // 8. LÓGICA DE INTERAÇÃO (LEITOS, MISSÕES, PRESCRIÇÃO E COORDENAÇÃO)
+    // =========================================================================
+    function triggerInteraction() {
+      if (!game.nearestInteractable || game.modalOpen) return;
+      initAudio();
+      sfxInteract();
+
+      const item = game.nearestInteractable;
+      if (item.kind === 'walker') {
+        openSimpleDialogueModal('Sala de Espera • Acompanhante', item.data.name, '🗣️', item.data.dialogue);
+        return;
+      }
+      if (item.kind === 'npc') {
+        handleNpcInteraction(item.data);
+        return;
+      }
+      if (item.kind === 'bed') {
+        openPatientBedModal(item.data);
+      }
+    }
+
+    function openSimpleDialogueModal(badge, title, icon, text, extraHTML = '') {
+      game.modalOpen = true;
+      document.getElementById('cModalHeader').className = 'p-4 md:p-6 text-white bg-gradient-to-r from-teal-700 to-emerald-700 flex items-start justify-between gap-4';
+      document.getElementById('cModalBadge').textContent = badge;
+      document.getElementById('cModalTitle').textContent = title;
+      document.getElementById('cModalFooterHint').textContent = 'Diálogo informativo';
+
+      document.getElementById('cModalBody').innerHTML = `
+        <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-start gap-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-teal-100 text-teal-800 flex items-center justify-center text-2xl shrink-0">${icon}</div>
+          <p class="text-slate-700 leading-relaxed">${text}</p>
+        </div>
+        ${extraHTML}
+      `;
+      document.getElementById('clinicalModal').classList.remove('hidden');
+    }
+
+    function handleNpcInteraction(npc) {
+      if (npc.role === 'companion') {
+        openSimpleDialogueModal('Sala de Espera • Acompanhante', npc.name, '🪑', npc.dialogue);
+        return;
+      }
+
+      if (npc.role === 'receptionist') {
+        openSimpleDialogueModal(
+          'Recepção Central • Hospital Universitário',
+          'Recepcionista Clara',
+          '👩‍💼',
+          `“Olá, <strong>${game.playerName}</strong>! Seja muito bem-vindo(a) ao nosso Hospital Universitário. Aqui estão as orientações do seu plantão de hoje:”`,
+          `
+          <div class="grid sm:grid-cols-2 gap-3 text-xs">
+            <div class="p-3.5 rounded-2xl bg-sky-50 border border-sky-200">
+              <div class="font-extrabold text-sky-900 mb-1">🚪 Portas Laterais (Enfermarias)</div>
+              <p class="text-sky-800">• <strong>Oeste (Esquerda):</strong> Ala Dorothea Orem (10 Leitos).<br>• <strong>Leste (Direita):</strong> Ala Wanda Horta (10 Leitos).</p>
+            </div>
+            <div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200">
+              <div class="font-extrabold text-amber-900 mb-1">🚪 Portas ao Norte</div>
+              <p class="text-amber-900">• <strong>Norte-Oeste:</strong> UTI (5 Leitos, incluindo Ventilação Mecânica).<br>• <strong>Norte-Leste:</strong> Sala da Coordenação de Enfermagem (Avaliação Final).</p>
+            </div>
+          </div>
+          <div class="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-950">
+            <strong>💡 Dica:</strong> Converse também com o <strong>Enf. Preceptor Dr. Rafael</strong> à esquerda da recepção para iniciar a missão do <strong>Estetoscópio Littmann</strong> e abra <strong>Minha Prancheta (Tecla P)</strong> sempre que quiser consultar o roteiro completo do seminário!
+          </div>
+          `
+        );
+        return;
+      }
+
+      if (npc.role === 'littmann_quest') {
+        const vitalsCount = Object.keys(game.littmannMission.vitalsChecked).length;
+
+        if (game.littmannMission.unlocked) {
+          openSimpleDialogueModal(
+            'Missão Secundária Concluída • Semiologia',
+            'Enf. Preceptor Dr. Rafael',
+            '🩺',
+            '“Parabéns! Você já conquistou e equipou o seu <strong>Estetoscópio Littmann Classic III</strong>! Repare como ele agora acompanha você no pescoço durante todo o plantão.”'
+          );
+          return;
+        }
+
+        if (!game.littmannMission.started) {
+          game.littmannMission.started = true;
+          updateHUD();
+        }
+
+        if (vitalsCount >= 3) {
+          game.littmannMission.unlocked = true;
+          game.score += 300;
+          sfxSuccess();
+          updateHUD();
+          openSimpleDialogueModal(
+            '🏆 Recompensa Desbloqueada!',
+            'Estetoscópio Littmann Classic III Equipado!',
+            '🩺',
+            '“Excelente trabalho na triagem semiológica dos 3 setores! Como reconhecimento pela sua precisão clínica, entrego a você este <strong>Estetoscópio Littmann</strong> oficial. Ele agora está visível no seu pescoço!”',
+            `<div class="p-4 rounded-2xl bg-sky-50 border-2 border-sky-400 text-center font-extrabold text-sky-900">
+              +300 Pontos • Item Cosmético & Clínico Equipado no Personagem!
+            </div>`
+          );
+          return;
+        }
+
+        openSimpleDialogueModal(
+          'Missão Secundária 1 • Desafio da Semiologia',
+          'Enf. Preceptor Dr. Rafael',
+          '🩺',
+          `“Olá, estagiário(a)! Tenho um <strong>Estetoscópio Littmann Classic III</strong> reservado para quem demonstrar rigor na avaliação semiológica. Visite os leitos e realize a <strong>Ausculta & Sinais Vitais</strong> em pelo menos <strong>3 pacientes</strong> (Progresso atual: <strong>${vitalsCount}/3</strong>). Depois volte aqui para receber seu Littmann!”`,
+          `<div class="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-950">
+            <strong>Como cumprir:</strong> Ao abrir o prontuário de qualquer paciente nos leitos da Ala Orem, Ala Horta ou UTI, clique no botão <strong>“🩺 Realizar Ausculta & Conferir Sinais Vitais”</strong>.
+          </div>`
+        );
+        return;
+      }
+
+      if (npc.role === 'theory_guide_orem') {
+        openSimpleDialogueModal(
+          'Preceptoria Teórica • Ala Oeste',
+          'Profa. Dorothea E. Orem',
+          '📘',
+          '“Nesta enfermaria temos 10 pacientes com diferentes graus de déficit de autocuidado. Avalie cada leito para identificar se a Demanda Terapêutica supera a Agência de Autocuidado e escolha entre os sistemas <em>Totalmente Compensatório</em>, <em>Parcialmente Compensatório</em> ou <em>Apoio-Educação</em>.”',
+          `<button onclick="closeClinicalModal(); openClipboardModal('orem');" class="px-4 py-2.5 rounded-xl bg-sky-700 text-white font-bold text-xs">
+            Abrir os 7 Tópicos de Orem na Minha Prancheta 📋
+          </button>`
+        );
+        return;
+      }
+
+      if (npc.role === 'theory_guide_horta') {
+        openSimpleDialogueModal(
+          'Preceptoria Teórica • Ala Leste',
+          'Profa. Wanda de Aguiar Horta',
+          '📗',
+          '“Nesta enfermaria cuidamos do ser humano como uma totalidade holística. Identifique as Necessidades Humanas Básicas afetadas (Psicobiológicas, Psicossociais e Psicoespirituais) e aplique as 6 etapas do Processo de Enfermagem para restabelecer o equilíbrio dinâmico.”',
+          `<button onclick="closeClinicalModal(); openClipboardModal('horta');" class="px-4 py-2.5 rounded-xl bg-emerald-700 text-white font-bold text-xs">
+            Abrir os 7 Tópicos de Horta na Minha Prancheta 📋
+          </button>`
+        );
+        return;
+      }
+
+      if (npc.role === 'uti_guide') {
+        openSimpleDialogueModal(
+          'Unidade de Terapia Intensiva • Alta Complexidade',
+          'Enf. Intensivista Camila',
+          '🫀',
+          '“Bem-vindo(a) à UTI! Aqui temos 5 leitos críticos — atenção especial ao <strong>Leito UTI-01</strong>, onde o paciente está intubado sob <strong>Ventilação Mecânica Invasiva (VMI)</strong>. Observe como as teorias de Orem (Sistema Totalmente Compensatório) e Horta (NHB de Oxigenação prioritária) se integram na terapia intensiva.”'
+        );
+        return;
+      }
+
+      if (npc.role === 'coordinator_exam') {
+        openCoordinatorExamModal();
+      }
+    }
+
+    // =========================================================================
+    // 9. MODAL DO LEITO DO PACIENTE (CASO CLÍNICO + AUSCULTA + PRESCRIÇÃO)
+    // =========================================================================
+    function openPatientBedModal(patient) {
+      game.modalOpen = true;
+      const isOrem = patient.wing === 'orem';
+      const isUTI = patient.wing === 'uti';
+
+      const headerGrad = isUTI
+        ? 'from-sky-900 via-blue-800 to-indigo-900'
+        : isOrem
+        ? 'from-sky-700 to-blue-600'
+        : 'from-emerald-700 to-teal-600';
+
+      document.getElementById('cModalHeader').className = `p-4 md:p-6 text-white bg-gradient-to-r ${headerGrad} flex items-start justify-between gap-4`;
+      document.getElementById('cModalBadge').textContent = `${isUTI ? 'UTI • Alta Complexidade' : isOrem ? 'Ala Dorothea Orem' : 'Ala Wanda Horta'} • ${patient.bedLabel}`;
+      document.getElementById('cModalTitle').textContent = `${patient.name} (${patient.age} anos)`;
+
+      const alreadySolved = !!game.completedBeds[patient.bedKey];
+      const vitalsDone = !!game.littmannMission.vitalsChecked[patient.bedKey];
+      const rxDone = !!game.prescriptionsDone[patient.bedKey];
+
+      let vmiBanner = '';
+      if (patient.isMechanicalVentilation) {
+        vmiBanner = `
+          <div class="p-3.5 rounded-2xl bg-sky-950 text-sky-100 border-2 border-sky-400 flex items-center gap-3">
+            <span class="text-2xl">🫁</span>
+            <div class="text-xs">
+              <div class="font-black uppercase tracking-wider text-sky-300">Suporte Ventilatório Avançado</div>
+              <div>Paciente intubado sob <strong>Ventilação Mecânica Invasiva (VMI)</strong> e monitorização multiparamétrica contínua.</div>
+            </div>
+          </div>
+        `;
+      }
+
+      let rxSection = '';
+      if (patient.hasPrescriptionTask) {
+        rxSection = `
+          <div class="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 space-y-2.5">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-black uppercase tracking-wider text-amber-800">✍️ Missão Paralela: Prescrição de Enfermagem</span>
+              <span class="text-xs font-bold px-2.5 py-0.5 rounded-full ${rxDone ? 'bg-emerald-600 text-white' : 'bg-amber-200 text-amber-900'}">
+                ${rxDone ? '✓ Prescrição Salva' : 'Pendente'}
+              </span>
+            </div>
+            <p class="text-xs md:text-sm text-slate-700">${patient.rxScenario}</p>
+            <div id="rxOptionsBox" class="space-y-2">
+              ${patient.rxOptions.map((opt, i) => `
+                <button ${rxDone ? 'disabled' : ''} onclick="submitPrescription('${patient.bedKey}', ${i}, this)" class="w-full text-left p-3 rounded-xl border text-xs md:text-sm font-medium transition ${
+                  rxDone && opt.correct
+                    ? 'border-emerald-500 bg-emerald-100 text-emerald-950 font-bold'
+                    : 'border-amber-300 bg-white hover:bg-amber-100/60 text-slate-800'
+                }">
+                  ${opt.text}
+                </button>
+              `).join('')}
+            </div>
+            <div id="rxFeedbackBox" class="hidden text-xs font-bold p-2.5 rounded-xl"></div>
+          </div>
+        `;
+      }
+
+      document.getElementById('cModalBody').innerHTML = `
+        ${vmiBanner}
+
+        <!-- Ficha Clínica do Paciente Sorteado -->
+        <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2.5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="text-xs font-extrabold uppercase tracking-wider text-slate-500">Diagnóstico Médico / Clínico</span>
+            <span class="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-200 text-slate-800">${patient.seminarFocus}</span>
+          </div>
+          <div class="font-bold text-slate-900 text-base">${patient.diagnosis}</div>
+          <p class="text-slate-700 text-xs md:text-sm leading-relaxed">${patient.history}</p>
+
+          <!-- Sinais Vitais & Botão Missão Littmann -->
+          <div class="pt-2 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
+            <div class="text-xs font-mono font-bold text-slate-700 bg-white px-3 py-1.5 rounded-xl border border-slate-200">
+              📊 ${patient.vitals}
+            </div>
+            <button id="btnCheckVitals" onclick="registerPatientVitals('${patient.bedKey}')" class="px-3.5 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-1.5 ${
+              vitalsDone
+                ? 'bg-sky-100 text-sky-800 border border-sky-300'
+                : 'bg-sky-600 hover:bg-sky-500 text-white shadow'
+            }">
+              <span>🩺</span>
+              <span>${vitalsDone ? 'Ausculta & Sinais Vitais Registrados ✓' : 'Realizar Ausculta & Conferir Sinais Vitais'}</span>
+            </button>
+          </div>
+        </div>
+
+        ${rxSection}
+
+        <!-- Estudo de Caso Aplicado ao Paciente -->
+        <div class="space-y-3 pt-1">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-black uppercase tracking-wider text-teal-700">🧠 Raciocínio Clínico Aplicado ao Paciente</span>
+            ${alreadySolved ? '<span class="text-xs font-extrabold text-emerald-600">✅ Caso Concluído</span>' : ''}
+          </div>
+          <p class="font-bold text-slate-900">${patient.question}</p>
+
+          <div id="bedQuizOptions" class="space-y-2">
+            ${patient.options.map((opt, idx) => `
+              <button onclick="answerBedCase('${patient.bedKey}', ${idx}, this)" class="w-full text-left p-3.5 rounded-xl border-2 text-xs md:text-sm font-medium transition flex items-start gap-3 ${
+                alreadySolved && idx === patient.correct
+                  ? 'border-emerald-500 bg-emerald-50 text-emerald-950 font-bold'
+                  : 'border-slate-200 hover:border-slate-400 bg-white text-slate-800'
+              }">
+                <span class="w-6 h-6 rounded-lg bg-slate-100 border border-slate-300 flex items-center justify-center text-xs font-extrabold shrink-0">
+                  ${String.fromCharCode(65 + idx)}
+                </span>
+                <span>${opt}</span>
+              </button>
+            `).join('')}
+          </div>
+
+          <div id="bedQuizFeedback" class="${alreadySolved ? '' : 'hidden'} p-4 rounded-2xl text-xs md:text-sm leading-relaxed border border-emerald-300 bg-emerald-50 text-emerald-950">
+            ${alreadySolved ? `<strong>✅ Fundamentação Validada:</strong> ${patient.rationale}` : ''}
+          </div>
+        </div>
+      `;
+
+      document.getElementById('cModalFooterHint').textContent = alreadySolved
+        ? 'Paciente já avaliado e registrado na Minha Prancheta'
+        : 'Resolva o caso clínico deste paciente para pontuar';
+
+      document.getElementById('clinicalModal').classList.remove('hidden');
+    }
+
+    function registerPatientVitals(bedKey) {
+      if (!game.littmannMission.started) {
+        game.littmannMission.started = true;
+      }
+      if (!game.littmannMission.vitalsChecked[bedKey]) {
+        game.littmannMission.vitalsChecked[bedKey] = true;
+        game.score += 50;
+        sfxSuccess();
+        updateHUD();
+
+        const btn = document.getElementById('btnCheckVitals');
+        if (btn) {
+          btn.className = 'px-3.5 py-2 rounded-xl text-xs font-extrabold bg-sky-100 text-sky-800 border border-sky-300 flex items-center gap-1.5';
+          btn.innerHTML = '<span>🩺</span><span>Ausculta & Sinais Vitais Registrados ✓</span>';
+        }
+
+        const count = Object.keys(game.littmannMission.vitalsChecked).length;
+        if (count === 3 && !game.littmannMission.unlocked) {
+          showToast('🩺 Você avaliou 3 pacientes! Volte ao Enf. Preceptor Dr. Rafael na Recepção para pegar seu Estetoscópio Littmann!');
+        } else if (count < 3 && !game.littmannMission.unlocked) {
+          showToast(`🩺 Sinais vitais registrados (${count}/3 para o Estetoscópio Littmann).`);
+        }
+      }
+    }
+
+    function submitPrescription(bedKey, optIdx, btnEl) {
+      const allPatients = [...game.wardPatients.orem, ...game.wardPatients.horta, ...game.wardPatients.uti];
+      const pat = allPatients.find(p => p.bedKey === bedKey);
+      if (!pat) return;
+
+      const chosen = pat.rxOptions[optIdx];
+      const fb = document.getElementById('rxFeedbackBox');
+
+      if (chosen.correct) {
+        sfxSuccess();
+        if (!game.prescriptionsDone[bedKey]) {
+          game.prescriptionsDone[bedKey] = {
+            patientName: pat.name,
+            bedLabel: pat.bedLabel,
+            prescription: chosen.text
+          };
+          game.score += 120;
+          updateHUD();
+        }
+        const btns = document.getElementById('rxOptionsBox').querySelectorAll('button');
+        btns.forEach((b, i) => {
+          b.disabled = true;
+          if (pat.rxOptions[i].correct) {
+            b.className = 'w-full text-left p-3 rounded-xl border-2 border-emerald-500 bg-emerald-100 text-emerald-950 text-xs md:text-sm font-bold';
+          }
+        });
+        fb.className = 'text-xs font-bold p-3 rounded-xl bg-emerald-100 border border-emerald-300 text-emerald-950';
+        fb.textContent = '✅ Prescrição de Enfermagem validada e arquivada na Minha Prancheta! (+120 pts)';
+        fb.classList.remove('hidden');
+      } else {
+        sfxError();
+        btnEl.className = 'w-full text-left p-3 rounded-xl border-2 border-rose-400 bg-rose-50 text-rose-900 text-xs md:text-sm font-medium';
+        fb.className = 'text-xs font-bold p-3 rounded-xl bg-rose-100 border border-rose-300 text-rose-950';
+        fb.textContent = '⚠️ Conduta insegura ou incompatível com a teoria. Revise as necessidades do paciente e tente novamente!';
+        fb.classList.remove('hidden');
+      }
+    }
+
+    function answerBedCase(bedKey, selectedIdx, btnEl) {
+      const allPatients = [...game.wardPatients.orem, ...game.wardPatients.horta, ...game.wardPatients.uti];
+      const pat = allPatients.find(p => p.bedKey === bedKey);
+      if (!pat) return;
+
+      const fb = document.getElementById('bedQuizFeedback');
+      const allBtns = document.getElementById('bedQuizOptions').querySelectorAll('button');
+
+      game.totalQuestionsAnswered++;
+
+      if (selectedIdx === pat.correct) {
+        sfxSuccess();
+        game.correctQuestionsCount++;
+
+        allBtns.forEach((b, i) => {
+          b.disabled = true;
+          if (i === pat.correct) {
+            b.className = 'w-full text-left p-3.5 rounded-xl border-2 border-emerald-500 bg-emerald-50 text-emerald-950 text-xs md:text-sm font-bold flex items-start gap-3';
+          } else {
+            b.className = 'w-full text-left p-3.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-400 opacity-60 text-xs md:text-sm flex items-start gap-3';
+          }
+        });
+
+        if (!game.completedBeds[bedKey]) {
+          game.completedBeds[bedKey] = true;
+          game.score += 100;
+          updateHUD();
+        }
+
+        fb.className = 'p-4 rounded-2xl text-xs md:text-sm leading-relaxed border border-emerald-300 bg-emerald-50 text-emerald-950';
+        fb.innerHTML = `<strong>✅ Caso Clínico Resolvido! (+100 pts)</strong><br>${pat.rationale}`;
+        fb.classList.remove('hidden');
+      } else {
+        sfxError();
+        btnEl.className = 'w-full text-left p-3.5 rounded-xl border-2 border-rose-400 bg-rose-50 text-rose-900 text-xs md:text-sm font-medium flex items-start gap-3';
+        fb.className = 'p-4 rounded-2xl text-xs md:text-sm leading-relaxed border border-rose-300 bg-rose-50 text-rose-950';
+        fb.innerHTML = `<strong>⚠️ Raciocínio Incompleto:</strong> Releia o diagnóstico, os sinais vitais e o foco teórico do paciente (você também pode consultar a <em>Minha Prancheta</em>).`;
+        fb.classList.remove('hidden');
+      }
+    }
+
+    function closeClinicalModal() {
+      document.getElementById('clinicalModal').classList.add('hidden');
+      game.modalOpen = false;
+    }
+
+    // =========================================================================
+    // 10. AVALIAÇÃO FINAL NA SALA DA COORDENAÇÃO DE ENFERMAGEM
+    // =========================================================================
+    function openCoordinatorExamModal() {
+      const bedsCount = Object.keys(game.completedBeds).length;
+
+      // Exige ao menos 6 leitos avaliados (incluindo vivência nas alas/UTI) para liberar a defesa final
+      if (bedsCount < 6 && !game.finalExamPassed) {
+        sfxError();
+        openSimpleDialogueModal(
+          'Coordenação de Enfermagem • Pré-Requisito de Estágio',
+          'Profa. Dra. Helena (Coordenadora)',
+          '🎓',
+          `“Olá, <strong>${game.playerName}</strong>! Antes de iniciarmos sua arguição final do seminário sobre Dorothea Orem e Wanda Horta, você precisa avaliar pelo menos <strong>6 pacientes</strong> pelos leitos das enfermarias e da UTI. Você avaliou <strong>${bedsCount}/6</strong> até o momento. Continue seu plantão e retorne!”`
+        );
+        return;
+      }
+
+      if (game.finalExamPassed) {
+        showFinalDiplomaModal();
+        return;
+      }
+
+      game.modalOpen = true;
+      const q = COORDINATOR_EXAM_QUESTIONS[game.finalExamStep];
+
+      document.getElementById('cModalHeader').className = 'p-4 md:p-6 text-white bg-gradient-to-r from-amber-700 via-yellow-700 to-amber-800 flex items-start justify-between gap-4';
+      document.getElementById('cModalBadge').textContent = `Coordenação de Enfermagem • Arguição (${game.finalExamStep + 1}/${COORDINATOR_EXAM_QUESTIONS.length})`;
+      document.getElementById('cModalTitle').textContent = q.topic;
+
+      document.getElementById('cModalBody').innerHTML = `
+        <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-amber-200 text-amber-900 flex items-center justify-center text-2xl shrink-0">🎓</div>
+          <div>
+            <div class="text-xs font-extrabold uppercase text-amber-800">Profa. Dra. Helena • Coordenadora de Enfermagem</div>
+            <p class="text-slate-800 mt-1 leading-relaxed">“Para validar seu seminário, responda com rigor científico ao roteiro obrigatório comparando Dorothea Orem e Wanda Horta.”</p>
+          </div>
+        </div>
+
+        <p class="font-extrabold text-slate-900 text-base">${q.question}</p>
+
+        <div id="coordOptions" class="space-y-2.5">
+          ${q.options.map((opt, idx) => `
+            <button onclick="answerCoordinatorStep(${idx}, this)" class="w-full text-left p-3.5 rounded-xl border-2 border-slate-200 hover:border-amber-500 bg-white text-xs md:text-sm font-medium text-slate-800 transition flex items-start gap-3">
+              <span class="w-6 h-6 rounded-lg bg-amber-100 border border-amber-300 flex items-center justify-center text-xs font-extrabold text-amber-900 shrink-0">
+                ${String.fromCharCode(65 + idx)}
+              </span>
+              <span>${opt}</span>
+            </button>
+          `).join('')}
+        </div>
+
+        <div id="coordFeedback" class="hidden p-4 rounded-2xl text-xs md:text-sm leading-relaxed border"></div>
+      `;
+
+      document.getElementById('cModalFooterHint').textContent = 'Defesa final do Seminário de Teorias de Enfermagem';
+      document.getElementById('clinicalModal').classList.remove('hidden');
+    }
+
+    function answerCoordinatorStep(idx, btnEl) {
+      const q = COORDINATOR_EXAM_QUESTIONS[game.finalExamStep];
+      const fb = document.getElementById('coordFeedback');
+      const allBtns = document.getElementById('coordOptions').querySelectorAll('button');
+
+      game.totalQuestionsAnswered++;
+
+      if (idx === q.correct) {
+        sfxSuccess();
+        game.correctQuestionsCount++;
+        game.score += 250;
+        updateHUD();
+
+        allBtns.forEach((b, i) => {
+          b.disabled = true;
+          if (i === q.correct) {
+            b.className = 'w-full text-left p-3.5 rounded-xl border-2 border-emerald-500 bg-emerald-50 text-emerald-950 text-xs md:text-sm font-bold flex items-start gap-3';
+          } else {
+            b.className = 'w-full text-left p-3.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-400 opacity-60 text-xs md:text-sm flex items-start gap-3';
+          }
+        });
+
+        const isLast = game.finalExamStep >= COORDINATOR_EXAM_QUESTIONS.length - 1;
+        fb.className = 'p-4 rounded-2xl text-xs md:text-sm leading-relaxed border border-emerald-300 bg-emerald-50 text-emerald-950';
+        fb.innerHTML = `
+          <strong>✅ Resposta Aprovada pela Coordenação! (+250 pts)</strong><br>${q.explanation}
+          <div class="mt-3">
+            <button onclick="${isLast ? 'completeCoordinatorExam()' : 'nextCoordinatorStep()'}" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs md:text-sm shadow">
+              ${isLast ? 'Concluir Seminário & Receber Parecer Final 🎓' : 'Próxima Pergunta da Coordenadora ▶'}
+            </button>
+          </div>
+        `;
+        fb.classList.remove('hidden');
+      } else {
+        sfxError();
+        btnEl.className = 'w-full text-left p-3.5 rounded-xl border-2 border-rose-400 bg-rose-50 text-rose-900 text-xs md:text-sm font-medium flex items-start gap-3';
+        fb.className = 'p-4 rounded-2xl text-xs md:text-sm leading-relaxed border border-rose-300 bg-rose-50 text-rose-950';
+        fb.innerHTML = `<strong>⚠️ Revise o Roteiro:</strong> Consulte <em>Minha Prancheta</em> (Tecla P) para revisar os 7 tópicos obrigatórios e tente novamente.`;
+        fb.classList.remove('hidden');
+      }
+    }
+
+    function nextCoordinatorStep() {
+      game.finalExamStep++;
+      openCoordinatorExamModal();
+    }
+
+    function completeCoordinatorExam() {
+      game.finalExamPassed = true;
+      showFinalDiplomaModal();
+    }
+
+    function showFinalDiplomaModal() {
+      sfxSuccess();
+      const bedsCount = Object.keys(game.completedBeds).length;
+      const rxCount = Object.keys(game.prescriptionsDone).length;
+      const acc = game.totalQuestionsAnswered > 0
+        ? Math.round((game.correctQuestionsCount / game.totalQuestionsAnswered) * 100)
+        : 100;
+
+      document.getElementById('cModalHeader').className = 'p-5 md:p-6 text-slate-950 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 flex items-start justify-between gap-4';
+      document.getElementById('cModalBadge').textContent = 'Coordenação de Enfermagem • Parecer Aprovado';
+      document.getElementById('cModalTitle').textContent = `Seminário Concluído: ${game.playerName}`;
+
+      document.getElementById('cModalBody').innerHTML = `
+        <div class="text-center space-y-4 py-2">
+          <div class="text-5xl">🎓</div>
+          <h3 class="text-xl md:text-2xl font-black text-slate-900">Aprovação com Excelência Clínica!</h3>
+          <p class="text-slate-700 max-w-xl mx-auto leading-relaxed">
+            A <strong>Coordenação de Enfermagem</strong> certifica que <strong>${game.playerName}</strong> demonstrou pleno domínio teórico-prático sobre a <strong>Teoria do Déficit de Autocuidado (Dorothea E. Orem)</strong> e a <strong>Teoria das Necessidades Humanas Básicas (Wanda de Aguiar Horta)</strong>.
+          </p>
+
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
+            <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+              <div class="text-[11px] font-bold text-slate-500">Leitos Avaliados</div>
+              <div class="text-lg font-black text-teal-700">${bedsCount}/25</div>
+            </div>
+            <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+              <div class="text-[11px] font-bold text-slate-500">Littmann</div>
+              <div class="text-lg font-black text-sky-700">${game.littmannMission.unlocked ? 'Equipado ✓' : 'Pendente'}</div>
+            </div>
+            <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+              <div class="text-[11px] font-bold text-slate-500">Prescrições</div>
+              <div class="text-lg font-black text-emerald-700">${rxCount}/3</div>
+            </div>
+            <div class="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+              <div class="text-[11px] font-bold text-slate-500">Pontuação (${acc}%)</div>
+              <div class="text-lg font-black text-amber-600">${game.score} pts</div>
+            </div>
+          </div>
+
+          <div class="pt-3 flex flex-wrap items-center justify-center gap-3">
+            <button onclick="closeClinicalModal()" class="px-5 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs md:text-sm">
+              Continuar Explorando o Hospital
+            </button>
+            <button onclick="restartWithNewPatients()" class="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs md:text-sm shadow-lg">
+              Novo Plantão (Sortear Novos Pacientes) ↻
+            </button>
+          </div>
+        </div>
+      `;
+      document.getElementById('clinicalModal').classList.remove('hidden');
+    }
+
+    function restartWithNewPatients() {
+      game.completedBeds = {};
+      game.score = 0;
+      game.totalQuestionsAnswered = 0;
+      game.correctQuestionsCount = 0;
+      game.littmannMission = { started: false, vitalsChecked: {}, unlocked: false };
+      game.prescriptionsDone = {};
+      game.finalExamPassed = false;
+      game.finalExamStep = 0;
+      game.currentMapId = 'reception';
+      game.player.x = 11 * TILE;
+      game.player.y = 12 * TILE;
+
+      initializeRandomizedPatients();
+      buildAllMaps();
+      closeClinicalModal();
+      updateHUD();
+      showToast('🔄 Novo plantão iniciado! Novos pacientes foram sorteados para todos os 25 leitos.');
+    }
+
+    // =========================================================================
+    // 11. INTERFACE "MINHA PRANCHETA" (7 TÓPICOS DO SEMINÁRIO + PACIENTES + MISSÕES)
+    // =========================================================================
+    let currentClipboardTab = 'orem';
+
+    function openClipboardModal(tab = 'orem') {
+      game.modalOpen = true;
+      switchClipboardTab(tab);
+      document.getElementById('clipboardModal').classList.remove('hidden');
+    }
+
+    function closeClipboardModal() {
+      document.getElementById('clipboardModal').classList.add('hidden');
+      game.modalOpen = false;
+    }
+
+    function switchClipboardTab(tab) {
+      currentClipboardTab = tab;
+      const tabs = {
+        orem: document.getElementById('tabBtnOrem'),
+        horta: document.getElementById('tabBtnHorta'),
+        patients: document.getElementById('tabBtnPatients'),
+        missions: document.getElementById('tabBtnMissions')
+      };
+
+      Object.entries(tabs).forEach(([k, btn]) => {
+        if (!btn) return;
+        if (k === tab) {
+          const activeColors = {
+            orem: 'bg-sky-700 text-white',
+            horta: 'bg-emerald-700 text-white',
+            patients: 'bg-teal-700 text-white',
+            missions: 'bg-amber-600 text-white'
+          };
+          btn.className = `px-3.5 py-2 rounded-t-xl font-extrabold transition ${activeColors[k]}`;
+        } else {
+          btn.className = 'px-3.5 py-2 rounded-t-xl bg-white text-slate-700 hover:bg-slate-200 transition';
+        }
+      });
+
+      const container = document.getElementById('clipboardTabContent');
+
+      if (tab === 'orem' || tab === 'horta') {
+        const theory = SEMINAR_CONTENT[tab];
+        const borderCol = tab === 'orem' ? 'border-sky-300' : 'border-emerald-300';
+        const titleCol = tab === 'orem' ? 'text-sky-900' : 'text-emerald-900';
+
+        container.innerHTML = `
+          <div class="bg-white/95 p-4 rounded-2xl border-2 ${borderCol} shadow-sm">
+            <h3 class="text-base md:text-lg font-black ${titleCol}">${theory.title}</h3>
+            <p class="text-xs text-slate-500 mt-0.5">Roteiro Obrigatório Completo do Seminário (7 Eixos Fundamentais)</p>
+          </div>
+          <div class="space-y-3">
+            ${theory.topics.map(t => `
+              <div class="bg-white/95 p-4 rounded-2xl border border-slate-200 shadow-sm">
+                <div class="font-extrabold ${titleCol} text-sm md:text-base mb-1.5">${t.num}</div>
+                <div class="text-slate-700 text-xs md:text-sm leading-relaxed">${t.body}</div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+        return;
+      }
+
+      if (tab === 'patients') {
+        const renderWardList = (title, list, badgeColor) => `
+          <div class="bg-white/95 p-4 rounded-2xl border border-slate-200 space-y-2">
+            <div class="font-black text-slate-900 text-sm">${title}</div>
+            <div class="grid sm:grid-cols-2 gap-2">
+              ${list.map(p => {
+                const done = !!game.completedBeds[p.bedKey];
+                return `
+                  <div class="p-2.5 rounded-xl border ${done ? 'border-emerald-300 bg-emerald-50/70' : 'border-slate-200 bg-slate-50'} flex items-center justify-between gap-2 text-xs">
+                    <div>
+                      <span class="font-extrabold ${badgeColor}">${p.bedLabel}:</span>
+                      <span class="font-bold text-slate-800">${p.name}</span>
+                      <div class="text-[11px] text-slate-500 truncate max-w-[210px]">${p.diagnosis}</div>
+                    </div>
+                    <span class="px-2 py-0.5 rounded-full font-extrabold text-[10px] ${done ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'}">
+                      ${done ? '✓' : 'Pendente'}
+                    </span>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+
+        const rxList = Object.values(game.prescriptionsDone);
+        container.innerHTML = `
+          ${renderWardList('🫀 UTI — Unidade de Terapia Intensiva (5 Leitos)', game.wardPatients.uti, 'text-sky-800')}
+          ${renderWardList('📘 Enfermaria Dorothea Orem (10 Leitos)', game.wardPatients.orem, 'text-sky-700')}
+          ${renderWardList('📗 Enfermaria Wanda Horta (10 Leitos)', game.wardPatients.horta, 'text-emerald-700')}
+          <div class="bg-white/95 p-4 rounded-2xl border border-amber-300 space-y-2">
+            <div class="font-black text-amber-900 text-sm">✍️ Prescrições de Enfermagem Assinadas (${rxList.length}/3)</div>
+            ${rxList.length === 0
+              ? '<p class="text-xs text-slate-500">Nenhuma prescrição assinada ainda. Procure os leitos com tarefas de prescrição nas enfermarias e na UTI.</p>'
+              : rxList.map(r => `
+                <div class="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs">
+                  <strong>${r.bedLabel} — ${r.patientName}:</strong> ${r.prescription}
+                </div>
+              `).join('')
+            }
+          </div>
+        `;
+        return;
+      }
+
+      if (tab === 'missions') {
+        const vitalsCount = Object.keys(game.littmannMission.vitalsChecked).length;
+        const rxCount = Object.keys(game.prescriptionsDone).length;
+        container.innerHTML = `
+          <div class="bg-white/95 p-4 rounded-2xl border-2 border-sky-300 space-y-2">
+            <div class="flex items-center justify-between">
+              <h4 class="font-black text-sky-900">🩺 Missão Secundária 1: O Estetoscópio Littmann</h4>
+              <span class="px-3 py-1 rounded-full text-xs font-extrabold ${game.littmannMission.unlocked ? 'bg-emerald-600 text-white' : 'bg-sky-100 text-sky-800'}">
+                ${game.littmannMission.unlocked ? 'Equipado no Pescoço ✓' : `${vitalsCount}/3 Pacientes Avaliados`}
+              </span>
+            </div>
+            <p class="text-xs md:text-sm text-slate-700">
+              Converse com o <strong>Enf. Preceptor Dr. Rafael</strong> na Recepção, realize a ausculta e conferência de sinais vitais em 3 pacientes nos leitos e retorne para equipar o <strong>Estetoscópio Littmann Classic III</strong> visível no sprite do seu personagem!
+            </p>
+          </div>
+
+          <div class="bg-white/95 p-4 rounded-2xl border-2 border-amber-300 space-y-2">
+            <div class="flex items-center justify-between">
+              <h4 class="font-black text-amber-900">✍️ Missão Secundária 2: Prescrição de Enfermagem</h4>
+              <span class="px-3 py-1 rounded-full text-xs font-extrabold ${rxCount >= 3 ? 'bg-emerald-600 text-white' : 'bg-amber-100 text-amber-900'}">
+                ${rxCount}/3 Prescrições Realizadas
+              </span>
+            </div>
+            <p class="text-xs md:text-sm text-slate-700">
+              Elabore e assine prescrições de enfermagem seguras nos leitos que possuem planejamento assistencial (Ala Orem, Ala Horta e Leito UTI-01 em Ventilação Mecânica).
+            </p>
+          </div>
+        `;
+      }
+    }
+
+    // =========================================================================
+    // 12. RENDERIZAÇÃO 2D PIXEL-ART TEXTURIZADA NO CANVAS
+    // =========================================================================
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      ctx.imageSmoothingEnabled = false;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function drawMapScene(time) {
+      const map = MAPS[game.currentMapId];
+      if (!map) return;
+
+      // 1. Tiles de Piso e Paredes 3D
+      for (let r = 0; r < map.rows; r++) {
+        for (let c = 0; c < map.cols; c++) {
+          const t = map.grid[r][c];
+          const x = c * TILE;
+          const y = r * TILE;
+
+          if (t === 1) {
+            ctx.drawImage(textures.wall, x, y);
+          } else {
+            const tex = textures[`floor${t === 6 ? map.floorType : t}`] || textures.floor0;
+            ctx.drawImage(tex, x, y);
+
+            if (t === 6) {
+              // Tapete central da recepção
+              ctx.fillStyle = 'rgba(13, 148, 136, 0.16)';
+              ctx.fillRect(x, y, TILE, TILE);
+            }
+          }
+        }
+      }
+
+      // 2. Marcações no Piso e Placas de Identificação
+      ctx.save();
+      ctx.textAlign = 'center';
+      if (map.id === 'reception') {
+        ctx.fillStyle = 'rgba(15, 118, 110, 0.22)';
+        ctx.font = '900 20px Inter, sans-serif';
+        ctx.fillText('HOSPITAL UNIVERSITÁRIO', 11 * TILE, 7.2 * TILE);
+        ctx.font = 'bold 12px Inter, sans-serif';
+        ctx.fillText('SALA DE ESPERA & TRIAGEM', 11 * TILE, 10.3 * TILE);
+      } else if (map.id === 'ward_orem') {
+        ctx.fillStyle = 'rgba(3, 105, 161, 0.2)';
+        ctx.font = '900 22px Inter, sans-serif';
+        ctx.fillText('ENFERMARIA DOROTHEA E. OREM • AUTOCUIDADO', 14 * TILE, 9.2 * TILE);
+      } else if (map.id === 'ward_horta') {
+        ctx.fillStyle = 'rgba(4, 120, 87, 0.2)';
+        ctx.font = '900 22px Inter, sans-serif';
+        ctx.fillText('ENFERMARIA WANDA DE A. HORTA • NHB', 14 * TILE, 9.2 * TILE);
+      } else if (map.id === 'uti') {
+        ctx.fillStyle = 'rgba(3, 105, 161, 0.22)';
+        ctx.font = '900 20px Inter, sans-serif';
+        ctx.fillText('UNIDADE DE TERAPIA INTENSIVA (UTI)', 11 * TILE, 10.4 * TILE);
+      }
+      ctx.restore();
+
+      // 3. Portas Interativas com Placas
+      for (const door of map.doors) {
+        drawDoorPortal(door, time);
+      }
+
+      // 4. Mobiliário e Leitos Hospitalares Detalhados
+      for (const s of map.solids) {
+        if (s.type === 'bed') drawTexturedBed(s, time);
+        else if (s.type === 'counter' || s.type === 'woodDesk') drawTexturedCounter(s);
+        else if (s.type === 'chairs') drawWaitingChairs(s);
+        else if (s.type === 'plant') drawTexturedPlant(s);
+        else if (s.type === 'water') drawWaterDispenser(s);
+        else if (s.type === 'bookshelf') drawBookshelf(s);
+      }
+
+      // 5. Acompanhantes caminhando (Recepção)
+      if (map.id === 'reception') {
+        for (const w of game.companions) {
+          drawHumanoidSprite({
+            x: w.x, y: w.y, dir: w.dir, frame: w.frame,
+            coatColor: w.shirt, hairColor: w.hair, isNurse: false, hasLittmann: false
+          });
+        }
+      }
+
+      // 6. NPCs Fixos (Recepcionista, Acompanhantes Sentados, Preceptores, Coordenadora)
+      for (const npc of map.npcs) {
+        const bob = npc.seated ? 0 : Math.sin(time * 2.5 + npc.x) * 1.5;
+        drawHumanoidSprite({
+          x: npc.x,
+          y: npc.y + bob,
+          dir: 'down',
+          frame: 0,
+          coatColor: npc.coat || npc.shirt,
+          hairColor: npc.hair,
+          isNurse: !!npc.coat,
+          hasLittmann: npc.role === 'littmann_quest' || npc.role === 'uti_guide'
+        });
+
+        // Balão identificador
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.beginPath();
+        ctx.roundRect(npc.x - 12, npc.y - 38 + bob, 24, 18, 6);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 11px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(npc.badge || '💬', npc.x, npc.y - 25 + bob);
+      }
+
+      // 7. Jogador (com Estetoscópio Littmann visível se desbloqueado!)
+      drawHumanoidSprite({
+        x: game.player.x,
+        y: game.player.y,
+        dir: game.player.dir,
+        frame: game.player.frame,
+        coatColor: '#ffffff',
+        hairColor: game.avatar === 'F' ? '#7c2d12' : '#1e293b',
+        isNurse: true,
+        isFemale: game.avatar === 'F',
+        hasLittmann: game.littmannMission.unlocked
+      });
+    }
+
+    function drawDoorPortal(door, time) {
+      const pulse = 0.75 + Math.sin(time * 4) * 0.25;
+      // Moldura da porta
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(door.x - 3, door.y - 3, door.w + 6, door.h + 6);
+
+      // Tapete luminoso da porta
+      ctx.fillStyle = door.color;
+      ctx.globalAlpha = pulse;
+      ctx.fillRect(door.x, door.y, door.w, door.h);
+      ctx.globalAlpha = 1;
+
+      // Placa indicativa
+      const cx = door.x + door.w / 2;
+      const cy = door.orientation === 'north' ? door.y + door.h + 16 : door.y - 12;
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+      ctx.beginPath();
+      ctx.roundRect(cx - 72, cy - 11, 144, 18, 6);
+      ctx.fill();
+      ctx.strokeStyle = door.color;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 10px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(door.label, cx, cy + 1);
+    }
+
+    function drawTexturedBed(solid, time) {
+      const { x, y, w, h, patient } = solid;
+      const done = !!game.completedBeds[patient.bedKey];
+
+      // Sombra projetada
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.2)';
+      ctx.fillRect(x + 4, y + 6, w, h);
+
+      // Estrutura metálica com grades laterais
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x, y, w, h);
+
+      // Colchão hospitalar texturizado
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(x + 6, y + 5, w - 12, h - 10);
+
+      // Travesseiro
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillRect(x + 9, y + 10, 22, h - 20);
+
+      // Lençol / Cobertor com dobra
+      ctx.fillStyle = patient.blanket;
+      ctx.fillRect(x + 40, y + 7, w - 48, h - 14);
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.fillRect(x + 40, y + 7, 6, h - 14);
+
+      // Paciente deitado no leito
+      ctx.fillStyle = '#fdba74';
+      ctx.beginPath();
+      ctx.arc(x + 23, y + h / 2, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = patient.hair;
+      ctx.beginPath();
+      ctx.arc(x + 21, y + h / 2, 10, Math.PI * 0.6, Math.PI * 1.4);
+      ctx.fill();
+
+      // Monitor Multiparamétrico (em todos os leitos de UTI e enfermarias)
+      const monX = x + 4;
+      const monY = y - 19;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(monX, monY, 34, 16);
+      ctx.strokeStyle = '#475569';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(monX, monY, 34, 16);
+
+      // Traçado ECG animado
+      ctx.strokeStyle = '#22c55e';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      const beat = Math.sin(time * 9 + x) * 3.5;
+      ctx.moveTo(monX + 3, monY + 8);
+      ctx.lineTo(monX + 11, monY + 8);
+      ctx.lineTo(monX + 15, monY + 3 + beat);
+      ctx.lineTo(monX + 19, monY + 13 - beat);
+      ctx.lineTo(monX + 23, monY + 8);
+      ctx.lineTo(monX + 31, monY + 8);
+      ctx.stroke();
+
+      // SE FOR PACIENTE EM VENTILAÇÃO MECÂNICA INVASIVA (UTI-01):
+      if (patient.isMechanicalVentilation) {
+        const ventX = x + w - 26;
+        const ventY = y - 24;
+        // Torre do Ventilador Mecânico
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(ventX, ventY, 24, 22);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(ventX + 3, ventY + 3, 18, 10);
+        // Curva respiratória no visor do ventilador
+        ctx.strokeStyle = '#fef08a';
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        const resp = Math.sin(time * 3.2) * 3;
+        ctx.moveTo(ventX + 4, ventY + 9);
+        ctx.lineTo(ventX + 10, ventY + 5 - resp);
+        ctx.lineTo(ventX + 18, ventY + 9);
+        ctx.stroke();
+
+        // Circuito traqueal conectando o ventilador ao tubo orotraqueal do paciente
+        ctx.strokeStyle = '#bae6fd';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(ventX + 6, ventY + 18);
+        ctx.quadraticCurveTo(x + 48, y - 6, x + 28, y + h / 2);
+        ctx.stroke();
+      }
+
+      // Placa do Leito e Status (✓ ou !)
+      ctx.fillStyle = done ? '#059669' : '#1e293b';
+      ctx.beginPath();
+      ctx.roundRect(x + 4, y + h + 3, w - 8, 16, 5);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 9px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      const shortName = patient.name.split(' ').slice(0, 2).join(' ');
+      ctx.fillText(`${done ? '✓' : '•'} ${patient.bedLabel}: ${shortName}`, x + w / 2, y + h + 14);
+    }
+
+    function drawTexturedCounter(s) {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.22)';
+      ctx.fillRect(s.x + 4, s.y + 6, s.w, s.h);
+
+      ctx.fillStyle = s.color;
+      ctx.fillRect(s.x, s.y, s.w, s.h);
+      ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(s.x + 2, s.y + 2, s.w - 4, s.h - 4);
+
+      // Computador / Prontuário Eletrônico sobre o balcão
+      const compX = s.x + s.w - 42;
+      const compY = s.y + 8;
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(compX, compY, 26, 18);
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillRect(compX + 2, compY + 2, 22, 12);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 11px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(s.label, s.x + s.w / 2 - 14, s.y + s.h / 2 + 4);
+    }
+
+    function drawWaitingChairs(s) {
+      const seatW = s.w / s.seats;
+      for (let i = 0; i < s.seats; i++) {
+        const sx = s.x + i * seatW + 2;
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(sx, s.y, seatW - 4, 10); // Encosto
+        ctx.fillStyle = '#0284c7';
+        ctx.fillRect(sx, s.y + 10, seatW - 4, s.h - 12); // Assento estofado
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(sx, s.y, seatW - 4, s.h - 2);
+      }
+    }
+
+    function drawTexturedPlant(p) {
+      const cx = p.x + p.w / 2;
+      const cy = p.y + p.h / 2;
+      ctx.fillStyle = '#9a3412';
+      ctx.fillRect(cx - 10, cy, 20, 14);
+      ctx.fillStyle = '#15803d';
+      ctx.beginPath();
+      ctx.arc(cx - 6, cy - 3, 10, 0, Math.PI * 2);
+      ctx.arc(cx + 6, cy - 3, 10, 0, Math.PI * 2);
+      ctx.arc(cx, cy - 9, 11, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawWaterDispenser(w) {
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillRect(w.x + 6, w.y + 12, 24, 28);
+      ctx.fillStyle = '#38bdf8';
+      ctx.beginPath();
+      ctx.arc(w.x + 18, w.y + 10, 10, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawBookshelf(b) {
+      ctx.fillStyle = '#78350f';
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      const colors = ['#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
+      for (let i = 0; i < 12; i++) {
+        ctx.fillStyle = colors[i % colors.length];
+        ctx.fillRect(b.x + 8 + i * 11, b.y + 8, 8, b.h - 16);
+      }
+    }
+
+    // Sprite Humanoide Pixel-Art com suporte ao Estetoscópio Littmann no Pescoço!
+    function drawHumanoidSprite({ x, y, dir, frame, coatColor, hairColor, isNurse, isFemale, hasLittmann }) {
+      const bob = (frame === 1 || frame === 3) ? -2.5 : 0;
+      const leftStep = frame === 1 ? -3 : 0;
+      const rightStep = frame === 3 ? -3 : 0;
+
+      // Sombra
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.28)';
+      ctx.beginPath();
+      ctx.ellipse(x, y + 17, 13, 5.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Sapatos
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(x - 9, y + 12 + leftStep, 7, 6);
+      ctx.fillRect(x + 2, y + 12 + rightStep, 7, 6);
+
+      // Tronco / Jaleco ou Roupa
+      ctx.fillStyle = coatColor;
+      ctx.fillRect(x - 11, y - 5 + bob, 22, 19);
+      ctx.strokeStyle = isNurse ? '#0f766e' : '#1e293b';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(x - 11, y - 5 + bob, 22, 19);
+
+      if (isNurse) {
+        // Gola interna verde-cirúrgico
+        ctx.fillStyle = '#10b981';
+        ctx.beginPath();
+        ctx.moveTo(x - 4, y - 5 + bob);
+        ctx.lineTo(x + 4, y - 5 + bob);
+        ctx.lineTo(x, y + 3 + bob);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      // ESTETOSCÓPIO LITTMANN VISÍVEL NO PESCOÇO!
+      if (hasLittmann && dir !== 'up') {
+        // Tubo em "U" azul-marinho / preto clássico do Littmann Classic III
+        ctx.strokeStyle = '#0284c7';
+        ctx.lineWidth = 2.6;
+        ctx.beginPath();
+        ctx.moveTo(x - 6, y - 5 + bob);
+        ctx.quadraticCurveTo(x - 7, y + 5 + bob, x, y + 6 + bob);
+        ctx.quadraticCurveTo(x + 7, y + 5 + bob, x + 6, y - 5 + bob);
+        ctx.stroke();
+
+        // Diafragma duplo de aço inoxidável prateado brilhante
+        ctx.fillStyle = '#e2e8f0';
+        ctx.beginPath();
+        ctx.arc(x + 4, y + 7 + bob, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // Cabeça
+      ctx.fillStyle = '#fdba74';
+      ctx.beginPath();
+      ctx.arc(x, y - 14 + bob, 10, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Cabelo
+      ctx.fillStyle = hairColor;
+      ctx.beginPath();
+      ctx.arc(x, y - 16 + bob, 10, Math.PI, Math.PI * 2);
+      ctx.fill();
+      if (isFemale) {
+        ctx.beginPath();
+        ctx.arc(x + 9, y - 15 + bob, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Olhos
+      if (dir !== 'up') {
+        const ox = dir === 'left' ? -3 : dir === 'right' ? 3 : 0;
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(x - 4 + ox, y - 14 + bob, 2, 3);
+        ctx.fillRect(x + 2 + ox, y - 14 + bob, 2, 3);
+      }
+    }
+
+    // Loop Principal
+    let lastTime = 0;
+    function gameLoop(ts) {
+      if (!lastTime) lastTime = ts;
+      const dt = Math.min((ts - lastTime) / 1000, 0.05);
+      lastTime = ts;
+
+      updateSimulation(dt);
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#0b1120';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const map = MAPS[game.currentMapId];
+      if (map) {
+        const mapW = map.cols * TILE;
+        const mapH = map.rows * TILE;
+
+        let camX = game.player.x - canvas.width / 2;
+        let camY = game.player.y - canvas.height / 2;
+
+        camX = mapW > canvas.width ? Math.max(0, Math.min(camX, mapW - canvas.width)) : -(canvas.width - mapW) / 2;
+        camY = mapH > canvas.height ? Math.max(0, Math.min(camY, mapH - canvas.height)) : -(canvas.height - mapH) / 2;
+
+        ctx.save();
+        ctx.translate(-Math.floor(camX), -Math.floor(camY));
+        drawMapScene(ts / 1000);
+        ctx.restore();
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    window.onload = function () {
+      resizeCanvas();
+      requestAnimationFrame(gameLoop);
+    };
+  </script>
+</body>
+</html>

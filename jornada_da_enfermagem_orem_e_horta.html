@@ -1,0 +1,1831 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Jornada da Enfermagem: Orem & Horta RPG</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #0f172a;
+      font-family: 'Inter', sans-serif;
+    }
+    .font-pixel {
+      font-family: 'Press Start 2P', monospace;
+    }
+    #gameCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      image-rendering: pixelated;
+    }
+    /* Custom Scrollbar for Modals */
+    .custom-scroll::-webkit-scrollbar {
+      width: 8px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 8px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #94a3b8;
+      border-radius: 8px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: #64748b;
+    }
+    @keyframes floatBadge {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-4px); }
+    }
+    .animate-float {
+      animation: floatBadge 2s ease-in-out infinite;
+    }
+    .dpad-btn:active {
+      transform: scale(0.92);
+      background-color: rgba(255, 255, 255, 0.35);
+    }
+  </style>
+</head>
+<body class="relative text-slate-800">
+
+  <!-- CANVAS PRINCIPAL DO JOGO -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- HUD SUPERIOR (VISÍVEL DURANTE O JOGO) -->
+  <div id="hud" class="hidden fixed top-0 left-0 right-0 z-20 p-3 md:p-4 pointer-events-none flex flex-wrap items-center justify-between gap-2">
+    <!-- Status & Progresso -->
+    <div class="pointer-events-auto bg-slate-900/90 backdrop-blur-md text-white border border-slate-700/80 rounded-2xl px-4 py-2.5 shadow-xl flex items-center gap-3 md:gap-4">
+      <div class="flex items-center gap-2">
+        <div class="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-400 font-bold text-lg">
+          ✚
+        </div>
+        <div>
+          <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Setor Atual</div>
+          <div id="hudSector" class="text-xs md:text-sm font-bold text-emerald-300">Recepção Central</div>
+        </div>
+      </div>
+
+      <div class="h-8 w-px bg-slate-700"></div>
+
+      <div>
+        <div class="flex items-center justify-between gap-3 text-xs mb-1">
+          <span class="text-slate-300 font-semibold">Estações Clínicas</span>
+          <span id="hudProgressText" class="font-bold text-amber-400">0/6</span>
+        </div>
+        <div class="w-28 md:w-36 h-2.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+          <div id="hudProgressBar" class="h-full bg-gradient-to-r from-emerald-400 to-teal-300 transition-all duration-500" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <div class="hidden sm:block h-8 w-px bg-slate-700"></div>
+
+      <div class="hidden sm:flex flex-col items-end">
+        <span class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Pontuação</span>
+        <span id="hudScore" class="text-sm font-extrabold text-sky-400">0 pts</span>
+      </div>
+    </div>
+
+    <!-- Botões Rápidos do HUD -->
+    <div class="pointer-events-auto flex items-center gap-2">
+      <button id="btnSoundToggle" onclick="toggleAudio()" title="Alternar Som" class="bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700 rounded-xl p-2.5 shadow-lg transition">
+        🔊
+      </button>
+      <button onclick="openNotebookModal()" class="bg-slate-900/90 hover:bg-slate-800 text-white border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs md:text-sm font-semibold shadow-lg flex items-center gap-2 transition">
+        <span>📋</span>
+        <span class="hidden sm:inline">Prontuário de Estudos</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- DICA FLUTUANTE DE INTERAÇÃO -->
+  <div id="interactPrompt" class="hidden fixed bottom-28 md:bottom-8 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+    <div class="animate-float bg-slate-900/95 text-white border-2 border-emerald-400 px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-2.5 text-xs md:text-sm font-bold">
+      <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+      <span id="interactPromptText">Pressione ESPAÇO ou toque em INTERAGIR</span>
+    </div>
+  </div>
+
+  <!-- CONTROLES VIRTUAIS MOBILE / TOUCH -->
+  <div id="mobileControls" class="hidden fixed bottom-4 left-4 right-4 z-20 flex items-end justify-between pointer-events-none md:opacity-80">
+    <!-- D-Pad -->
+    <div class="pointer-events-auto grid grid-cols-3 gap-1.5 w-36 h-36">
+      <div></div>
+      <button id="btnUp" class="dpad-btn bg-slate-900/80 border border-slate-600/80 text-white rounded-xl flex items-center justify-center text-xl shadow-lg">▲</button>
+      <div></div>
+      <button id="btnLeft" class="dpad-btn bg-slate-900/80 border border-slate-600/80 text-white rounded-xl flex items-center justify-center text-xl shadow-lg">◀</button>
+      <div class="bg-slate-900/40 rounded-xl border border-slate-700/40"></div>
+      <button id="btnRight" class="dpad-btn bg-slate-900/80 border border-slate-600/80 text-white rounded-xl flex items-center justify-center text-xl shadow-lg">▶</button>
+      <div></div>
+      <button id="btnDown" class="dpad-btn bg-slate-900/80 border border-slate-600/80 text-white rounded-xl flex items-center justify-center text-xl shadow-lg">▼</button>
+      <div></div>
+    </div>
+
+    <!-- Botão de Ação -->
+    <div class="pointer-events-auto flex flex-col items-end gap-2">
+      <button id="btnAction" onclick="triggerInteraction()" class="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 active:scale-95 text-white font-extrabold text-xs tracking-wide border-4 border-emerald-200/40 shadow-2xl flex flex-col items-center justify-center gap-1">
+        <span class="text-xl">💬</span>
+        <span>EXAMINAR</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- TELA INICIAL (START SCREEN) -->
+  <div id="startScreen" class="fixed inset-0 z-40 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+    <div class="max-w-2xl w-full bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden my-auto">
+      <!-- Cabeçalho Visual -->
+      <div class="bg-gradient-to-r from-teal-700 via-emerald-600 to-sky-700 p-6 md:p-8 text-white relative overflow-hidden">
+        <div class="absolute -right-6 -top-6 text-white/10 text-9xl font-black select-none">✚</div>
+        <div class="inline-flex items-center gap-2 bg-white/15 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold tracking-wider uppercase mb-3">
+          <span>🏥 RPG Educativo de Enfermagem</span>
+        </div>
+        <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight leading-tight">
+          Jornada Clínica: Dorothea Orem & Wanda Horta
+        </h1>
+        <p class="mt-2 text-emerald-50 text-sm md:text-base leading-relaxed">
+          Explore as enfermarias do Hospital Universitário, interaja com pacientes e teoristas, e domine os fundamentos do cuidado de enfermagem.
+        </p>
+      </div>
+
+      <!-- Corpo da Tela Inicial -->
+      <div class="p-6 md:p-8 space-y-6">
+        <!-- Escolha do Personagem -->
+        <div>
+          <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">
+            1. Escolha seu Perfil Profissional
+          </label>
+          <div class="grid grid-cols-2 gap-3">
+            <button type="button" id="selectNurseF" onclick="selectAvatar('F')" class="avatar-card border-2 border-emerald-500 bg-emerald-50/70 rounded-2xl p-3.5 flex items-center gap-3 text-left transition">
+              <div class="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-2xl shadow-inner">
+                👩‍⚕️
+              </div>
+              <div>
+                <div class="font-bold text-slate-900 text-sm md:text-base">Enfermeira</div>
+                <div class="text-xs text-slate-500">Jaleco & Estetoscópio</div>
+              </div>
+            </button>
+
+            <button type="button" id="selectNurseM" onclick="selectAvatar('M')" class="avatar-card border-2 border-slate-200 hover:border-slate-300 bg-white rounded-2xl p-3.5 flex items-center gap-3 text-left transition">
+              <div class="w-12 h-12 rounded-xl bg-sky-600 text-white flex items-center justify-center text-2xl shadow-inner">
+                👨‍⚕️
+              </div>
+              <div>
+                <div class="font-bold text-slate-900 text-sm md:text-base">Enfermeiro</div>
+                <div class="text-xs text-slate-500">Jaleco & Estetoscópio</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Nome do Jogador -->
+        <div>
+          <label for="playerNameInput" class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+            2. Seu Nome (para o Certificado Final)
+          </label>
+          <input id="playerNameInput" type="text" maxlength="28" placeholder="Ex: Acadêmico(a) Ana Silva" class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-800 font-medium text-sm" />
+        </div>
+
+        <!-- Roteiro do Hospital -->
+        <div class="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-2.5 text-xs md:text-sm text-slate-600">
+          <div class="font-bold text-slate-800 flex items-center gap-2">
+            <span>🗺️</span> Roteiro de Aprendizagem no Hospital:
+          </div>
+          <ul class="space-y-1.5 pl-1">
+            <li class="flex items-start gap-2">
+              <span class="text-sky-600 font-bold">• Ala Oeste (Azul):</span>
+              <span><strong>Dorothea E. Orem</strong> — Autocuidado, Déficit de Autocuidado e Sistemas de Enfermagem (3 leitos).</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="text-emerald-600 font-bold">• Ala Leste (Verde):</span>
+              <span><strong>Wanda de Aguiar Horta</strong> — Necessidades Humanas Básicas (NHB), Processo em 6 etapas e Assistência (3 leitos).</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="text-amber-600 font-bold">• Posto Norte (Dourado):</span>
+              <span><strong>Avaliação Clínica Final</strong> — Resolva casos práticos integrados para conquistar seu certificado.</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Controles e Botão Iniciar -->
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
+          <div class="text-xs text-slate-500 flex items-center gap-2">
+            <span class="px-2 py-1 bg-slate-100 border border-slate-300 rounded font-mono font-bold text-slate-700">WASD / Setas</span>
+            <span>Mover</span>
+            <span class="px-2 py-1 bg-slate-100 border border-slate-300 rounded font-mono font-bold text-slate-700">ESPAÇO / E</span>
+            <span>Interagir</span>
+          </div>
+          <button onclick="startGame()" class="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-sm md:text-base shadow-lg shadow-emerald-600/30 transition transform active:scale-95">
+            Iniciar Plantão Clínico ▶
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE ESTAÇÃO CLÍNICA (CONTEÚDO TEÓRICO + DESAFIO) -->
+  <div id="stationModal" class="hidden fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-3 md:p-6">
+    <div class="bg-white w-full max-w-2xl max-h-[90vh] rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+      <!-- Header do Modal -->
+      <div id="modalHeader" class="p-5 md:p-6 text-white bg-gradient-to-r from-sky-700 to-blue-600 flex items-start justify-between gap-4">
+        <div>
+          <div id="modalBadge" class="inline-block px-3 py-1 rounded-full bg-white/20 text-xs font-bold uppercase tracking-wider mb-1.5">
+            Ala Dorothea Orem • Estação 1
+          </div>
+          <h2 id="modalTitle" class="text-xl md:text-2xl font-extrabold leading-snug">
+            Teoria do Autocuidado
+          </h2>
+        </div>
+        <button onclick="closeStationModal()" class="w-9 h-9 rounded-xl bg-white/15 hover:bg-white/25 flex items-center justify-center text-white font-bold transition">
+          ✕
+        </button>
+      </div>
+
+      <!-- Conteúdo Rolável -->
+      <div class="p-5 md:p-6 overflow-y-auto custom-scroll space-y-5 flex-1">
+        <!-- Contexto do Paciente / Preceptora -->
+        <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex items-start gap-3.5">
+          <div id="modalSpeakerIcon" class="w-11 h-11 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center text-2xl shrink-0">
+            👩‍🏫
+          </div>
+          <div>
+            <div id="modalSpeakerName" class="text-xs font-bold uppercase tracking-wider text-slate-500">
+              Preceptora Dorothea Orem
+            </div>
+            <p id="modalScenario" class="text-sm text-slate-700 mt-1 leading-relaxed italic">
+              "Bem-vindo ao leito 1..."
+            </p>
+          </div>
+        </div>
+
+        <!-- Fundamentação Teórica -->
+        <div id="modalTheoryContent" class="space-y-3 text-sm md:text-[15px] text-slate-700 leading-relaxed">
+          <!-- Preenchido via JS -->
+        </div>
+
+        <!-- Divisor -->
+        <div class="border-t border-slate-200 pt-4">
+          <div class="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-amber-600 mb-2">
+            <span>🩺</span> Mini-Caso Clínico de Fixação
+          </div>
+          <p id="modalQuestion" class="font-bold text-slate-900 text-sm md:text-base mb-3">
+            Pergunta clínica...
+          </p>
+
+          <!-- Opções de Resposta -->
+          <div id="modalOptions" class="space-y-2.5">
+            <!-- Botões gerados via JS -->
+          </div>
+
+          <!-- Feedback Educativo -->
+          <div id="modalFeedback" class="hidden mt-4 p-4 rounded-2xl text-sm leading-relaxed border">
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer do Modal -->
+      <div class="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+        <span id="modalStatusPill" class="text-xs font-semibold text-slate-500">
+          Responda corretamente para validar esta estação
+        </span>
+        <button id="modalContinueBtn" onclick="closeStationModal()" class="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-sm transition">
+          Voltar ao Hospital
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DO PRONTUÁRIO DE ESTUDOS (RESUMO RÁPIDO) -->
+  <div id="notebookModal" class="hidden fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-3 md:p-6">
+    <div class="bg-white w-full max-w-2xl max-h-[88vh] rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden">
+      <div class="p-5 bg-slate-900 text-white flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <span class="text-2xl">📋</span>
+          <div>
+            <h2 class="text-lg font-extrabold">Prontuário de Progresso Clínico</h2>
+            <p class="text-xs text-slate-400">Acompanhe as estações concluídas nas duas alas</p>
+          </div>
+        </div>
+        <button onclick="closeNotebookModal()" class="w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center font-bold">✕</button>
+      </div>
+      <div id="notebookBody" class="p-5 overflow-y-auto custom-scroll space-y-4 text-sm">
+        <!-- Preenchido via JS -->
+      </div>
+      <div class="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+        <button onclick="closeNotebookModal()" class="px-5 py-2 rounded-xl bg-emerald-600 text-white font-bold text-sm">Continuar Explorando</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE CERTIFICADO FINAL -->
+  <div id="certificateModal" class="hidden fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-3 md:p-6 overflow-y-auto">
+    <div class="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border-4 border-amber-400 overflow-hidden my-auto">
+      <div class="bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 p-6 text-slate-950 text-center relative">
+        <div class="text-4xl mb-2">🏆</div>
+        <div class="text-xs font-black uppercase tracking-widest opacity-80">Hospital Universitário • Ensino em Enfermagem</div>
+        <h2 class="text-2xl md:text-3xl font-extrabold mt-1">Certificado de Excelência Clínica</h2>
+      </div>
+
+      <div class="p-6 md:p-8 text-center space-y-5">
+        <p class="text-sm text-slate-500">Certificamos que o(a) profissional / acadêmico(a)</p>
+        <div id="certPlayerName" class="text-2xl md:text-3xl font-extrabold text-slate-900 border-b-2 border-slate-200 pb-2 inline-block px-6">
+          Enfermeiro(a)
+        </div>
+        <p class="text-sm md:text-base text-slate-700 leading-relaxed max-w-xl mx-auto">
+          concluiu com êxito todas as estações clínicas e o exame integrado sobre a <strong>Teoria do Déficit de Autocuidado de Dorothea E. Orem</strong> e a <strong>Teoria das Necessidades Humanas Básicas de Wanda de Aguiar Horta</strong>.
+        </p>
+
+        <!-- Resumo de Desempenho -->
+        <div class="grid grid-cols-3 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+          <div>
+            <div class="text-xs text-slate-500 font-semibold">Estações</div>
+            <div class="text-lg font-extrabold text-emerald-600">6 / 6</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 font-semibold">Pontuação Final</div>
+            <div id="certScore" class="text-lg font-extrabold text-sky-600">0 pts</div>
+          </div>
+          <div>
+            <div class="text-xs text-slate-500 font-semibold">Aproveitamento</div>
+            <div id="certAccuracy" class="text-lg font-extrabold text-amber-600">100%</div>
+          </div>
+        </div>
+
+        <!-- Síntese Comparativa -->
+        <div class="grid sm:grid-cols-2 gap-3 text-left text-xs">
+          <div class="p-3.5 rounded-xl bg-sky-50 border border-sky-200">
+            <div class="font-extrabold text-sky-900 mb-1">📘 Dorothea E. Orem</div>
+            <p class="text-sky-800 leading-relaxed">Foco na capacidade de autocuidado, identificação de déficits entre demanda terapêutica e agência, e atuação nos sistemas Total, Parcial e Apoio-Educação.</p>
+          </div>
+          <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200">
+            <div class="font-extrabold text-emerald-900 mb-1">📗 Wanda de Aguiar Horta</div>
+            <p class="text-emerald-800 leading-relaxed">Foco no equilíbrio das Necessidades Humanas Básicas (Psicobiológicas, Psicossociais e Psicoespirituais) por meio do Processo de Enfermagem em 6 etapas.</p>
+          </div>
+        </div>
+
+        <div class="pt-3 flex flex-wrap items-center justify-center gap-3">
+          <button onclick="closeCertificateModal()" class="px-5 py-3 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-sm transition">
+            Continuar Passeando no Hospital
+          </button>
+          <button onclick="resetFullGame()" class="px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-lg transition">
+            Jogar Novamente ↻
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST DE NOTIFICAÇÃO RÁPIDA -->
+  <div id="toastBanner" class="hidden fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 text-white border border-amber-400/70 px-5 py-3 rounded-2xl shadow-2xl text-xs md:text-sm font-semibold text-center max-w-md">
+  </div>
+
+  <script>
+    // =========================================================================
+    // 1. SISTEMA DE ÁUDIO SINTÉTICO (WEB AUDIO API - SEM ARQUIVOS EXTERNOS)
+    // =========================================================================
+    let audioCtx = null;
+    let soundEnabled = true;
+
+    function initAudio() {
+      if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) audioCtx = new AudioContext();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function toggleAudio() {
+      soundEnabled = !soundEnabled;
+      document.getElementById('btnSoundToggle').textContent = soundEnabled ? '🔊' : '🔇';
+    }
+
+    function playTone(freq, type = 'sine', duration = 0.12, vol = 0.08) {
+      if (!soundEnabled || !audioCtx) return;
+      try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {}
+    }
+
+    function playSuccessSound() {
+      playTone(523.25, 'triangle', 0.12, 0.1);
+      setTimeout(() => playTone(659.25, 'triangle', 0.12, 0.1), 100);
+      setTimeout(() => playTone(783.99, 'triangle', 0.25, 0.12), 200);
+    }
+
+    function playErrorSound() {
+      playTone(220, 'sawtooth', 0.18, 0.08);
+      setTimeout(() => playTone(180, 'sawtooth', 0.22, 0.08), 140);
+    }
+
+    function playInteractSound() {
+      playTone(440, 'sine', 0.09, 0.07);
+    }
+
+    // =========================================================================
+    // 2. CONTEÚDO PEDAGÓGICO: ESTAÇÕES CLÍNICAS DE OREM E HORTA + EXAME FINAL
+    // =========================================================================
+    const STATIONS_DATA = {
+      orem1: {
+        id: 'orem1',
+        wing: 'orem',
+        badge: 'Ala Dorothea Orem • Leito 01',
+        title: '1. Teoria do Autocuidado e seus Requisitos',
+        headerGradient: 'from-sky-700 to-blue-600',
+        speakerIcon: '👩‍🏫',
+        speakerName: 'Profa. Dorothea E. Orem',
+        scenario: '“Observe o Sr. Carlos, internado para controle glicêmico. Para cuidar dele, primeiro precisamos compreender o que é o Autocuidado e quais requisitos sustentam a vida humana.”',
+        theoryHTML: `
+          <p>Para <strong>Dorothea Elizabeth Orem</strong>, o <strong>Autocuidado</strong> é a prática de atividades que os indivíduos iniciam e executam em seu próprio benefício para manter a vida, a saúde e o bem-estar.</p>
+          <div class="bg-sky-50 border border-sky-200 rounded-xl p-3.5 space-y-2">
+            <div class="font-bold text-sky-900">Os 3 Requisitos de Autocuidado:</div>
+            <ul class="list-disc pl-5 space-y-1 text-slate-700">
+              <li><strong>Requisitos Universais:</strong> Comuns a todos os seres humanos (ar, água, alimentos, eliminação, equilíbrio entre atividade/repouso e solidão/interação social, prevenção de riscos).</li>
+              <li><strong>Requisitos de Desenvolvimento:</strong> Relacionados às etapas do ciclo vital (gestação, infância, adolescência, envelhecimento) ou adaptação a novas condições.</li>
+              <li><strong>Requisitos de Desvio de Saúde:</strong> Surgem na presença de doença, lesão ou tratamento médico (ex.: monitorar glicemia, usar insulina, realizar curativos).</li>
+            </ul>
+          </div>
+        `,
+        question: 'Um paciente recém-diagnosticado com Diabetes Mellitus tipo 2 precisa aprender a aplicar insulina e verificar a glicemia capilar diariamente. Segundo Orem, essa demanda pertence a qual requisito?',
+        options: [
+          'Requisito Universal de Autocuidado',
+          'Requisito de Desvio de Saúde',
+          'Requisito de Desenvolvimento Biológico',
+          'Requisito de Interação Social'
+        ],
+        correctIndex: 1,
+        explanation: 'Exato! Os Requisitos de Desvio de Saúde surgem quando há doença, diagnóstico médico ou necessidade de medidas terapêuticas específicas, como o controle glicêmico e insulinoterapia.'
+      },
+
+      orem2: {
+        id: 'orem2',
+        wing: 'orem',
+        badge: 'Ala Dorothea Orem • Leito 02',
+        title: '2. Teoria do Déficit de Autocuidado',
+        headerGradient: 'from-sky-700 to-blue-600',
+        speakerIcon: '🛏️',
+        speakerName: 'Leito 02 • Paciente Dona Helena (Pós-operatório)',
+        scenario: '“Dona Helena passou por uma cirurgia ortopédica e está com limitação motora temporária, não conseguindo realizar sua higiene corporal sozinha.”',
+        theoryHTML: `
+          <p>A <strong>Teoria do Déficit de Autocuidado</strong> é o núcleo central do modelo de Orem. Ela define <em>quando</em> a enfermagem se torna necessária.</p>
+          <div class="bg-sky-50 border border-sky-200 rounded-xl p-3.5 space-y-2">
+            <div class="font-bold text-sky-900">Equação Fundamental de Orem:</div>
+            <ul class="list-disc pl-5 space-y-1 text-slate-700">
+              <li><strong>Agência de Autocuidado:</strong> Capacidade e habilidade adquirida pela pessoa para cuidar de si mesma.</li>
+              <li><strong>Demanda Terapêutica de Autocuidado:</strong> Total de ações necessárias para atender aos requisitos de autocuidado.</li>
+              <li><strong>Déficit de Autocuidado:</strong> Ocorre quando a <em>Demanda Terapêutica supera a Agência de Autocuidado</em> do indivíduo (por incapacidade física, cognitiva ou falta de conhecimento).</li>
+            </ul>
+          </div>
+        `,
+        question: 'Segundo Dorothea Orem, em que situação específica a atuação profissional da Enfermagem é legitimamente requisitada?',
+        options: [
+          'Sempre que o paciente entra no hospital, mesmo sendo totalmente independente',
+          'Apenas quando o médico prescreve medicamentos endovenosos',
+          'Quando a Demanda Terapêutica de Autocuidado é maior que a Agência de Autocuidado',
+          'Somente em unidades de terapia intensiva com pacientes inconscientes'
+        ],
+        correctIndex: 2,
+        explanation: 'Perfeito! O déficit de autocuidado existe quando as demandas terapêuticas superam a capacidade (agência) do paciente ou de seu agente de cuidado dependente.'
+      },
+
+      orem3: {
+        id: 'orem3',
+        wing: 'orem',
+        badge: 'Ala Dorothea Orem • Leito 03',
+        title: '3. Teoria dos Sistemas de Enfermagem',
+        headerGradient: 'from-sky-700 to-blue-600',
+        speakerIcon: '🩺',
+        speakerName: 'Profa. Dorothea E. Orem',
+        scenario: '“Identificado o déficit, o enfermeiro planeja a assistência escolhendo um dos três Sistemas de Enfermagem conforme o grau de participação do paciente.”',
+        theoryHTML: `
+          <p>Os <strong>Sistemas de Enfermagem</strong> organizam como o enfermeiro e o paciente atuam para suprir o déficit de autocuidado:</p>
+          <div class="bg-sky-50 border border-sky-200 rounded-xl p-3.5 space-y-2">
+            <ul class="list-disc pl-5 space-y-1.5 text-slate-700">
+              <li><strong>1. Sistema Totalmente Compensatório:</strong> O paciente é incapaz de realizar ações de autocuidado (ex.: paciente em coma, sedado). A enfermagem realiza tudo por ele.</li>
+              <li><strong>2. Sistema Parcialmente Compensatório:</strong> Enfermeiro e paciente executam juntos as medidas de cuidado (ex.: paciente em pós-operatório que escova os dentes, mas precisa de auxílio no banho e curativo).</li>
+              <li><strong>3. Sistema de Apoio-Educação:</strong> O paciente é capaz de executar o autocuidado, mas precisa de orientação, suporte emocional e ensino (ex.: gestante aprendendo amamentação).</li>
+            </ul>
+          </div>
+        `,
+        question: 'Um paciente internado em coma induzido sob ventilação mecânica encontra-se em qual Sistema de Enfermagem de Orem?',
+        options: [
+          'Sistema de Apoio-Educação',
+          'Sistema Parcialmente Compensatório',
+          'Sistema Totalmente Compensatório',
+          'Sistema de Requisitos Universais'
+        ],
+        correctIndex: 2,
+        explanation: 'Correto! No Sistema Totalmente Compensatório, o paciente não tem condição ativa de engajar-se no autocuidado, cabendo à enfermagem suprir integralmente suas necessidades.'
+      },
+
+      horta1: {
+        id: 'horta1',
+        wing: 'horta',
+        badge: 'Ala Wanda Horta • Leito 01',
+        title: '1. Necessidades Humanas Básicas (NHB)',
+        headerGradient: 'from-emerald-700 to-teal-600',
+        speakerIcon: '👩‍🏫',
+        speakerName: 'Profa. Wanda de Aguiar Horta',
+        scenario: '“Bem-vindo à enfermaria brasileira! Minha teoria fundamenta-se nas leis do equilíbrio (homeostase), adaptação e holismo, classificando as Necessidades Humanas Básicas.”',
+        theoryHTML: `
+          <p><strong>Wanda de Aguiar Horta</strong> baseou-se na hierarquia de Maslow e na classificação de <strong>João Mohana</strong> para estruturar as <strong>Necessidades Humanas Básicas (NHB)</strong>, que são estados de tensões conscientes ou inconscientes resultantes dos desequilíbrios hemodinâmicos.</p>
+          <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 space-y-2">
+            <div class="font-bold text-emerald-900">Classificação das NHB (João Mohana / Horta):</div>
+            <ul class="list-disc pl-5 space-y-1 text-slate-700">
+              <li><strong>Necessidades Psicobiológicas:</strong> Oxigenação, hidratação, nutrição, eliminação, sono e repouso, integridade cutâneo-mucosa, regulação térmica, percepção dolorosa.</li>
+              <li><strong>Necessidades Psicossociais:</strong> Segurança, amor, liberdade, comunicação, gregária (convívio), autoestima, auto-realização, recreação, aprendizagem.</li>
+              <li><strong>Necessidades Psicoespirituais:</strong> Religiosa ou teológica, ética ou de filosofia de vida.</li>
+            </ul>
+          </div>
+        `,
+        question: 'Um paciente internado relata muita ansiedade, medo da cirurgia e sente falta do convívio com sua família. Segundo a classificação adotada por Wanda Horta, quais NHBs estão afetadas?',
+        options: [
+          'Necessidades Psicobiológicas (Oxigenação e Regulação)',
+          'Necessidades Psicossociais (Segurança Emocional e Gregária)',
+          'Necessidades Psicoespirituais (Filosofia de Vida)',
+          'Necessidades de Desvio Terapêutico'
+        ],
+        correctIndex: 1,
+        explanation: 'Muito bem! Medo/ansiedade relacionam-se à necessidade de Segurança, e a falta do convívio familiar relaciona-se à necessidade Gregária — ambas pertencentes às Necessidades Psicossociais.'
+      },
+
+      horta2: {
+        id: 'horta2',
+        wing: 'horta',
+        badge: 'Ala Wanda Horta • Leito 02',
+        title: '2. Processo de Enfermagem em 6 Etapas',
+        headerGradient: 'from-emerald-700 to-teal-600',
+        speakerIcon: '📋',
+        speakerName: 'Leito 02 • Prontuário de Wanda Horta',
+        scenario: '“Para sistematizar a assistência e tornar a Enfermagem uma ciência autônoma no Brasil, estruturei o Processo de Enfermagem em seis etapas dinâmicas e inter-relacionadas.”',
+        theoryHTML: `
+          <p>O <strong>Processo de Enfermagem</strong> proposto por Wanda Horta (1979) é a dinâmica das ações sistematizadas e inter-relacionadas, composta originalmente por <strong>6 fases</strong>:</p>
+          <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5">
+            <ol class="list-decimal pl-5 space-y-1 text-slate-700">
+              <li><strong>Histórico de Enfermagem:</strong> Roteiro sistematizado para levantamento de dados (entrevista e exame físico) que identificam os problemas de enfermagem.</li>
+              <li><strong>Diagnóstico de Enfermagem:</strong> Identificação das necessidades básicas afetadas e do grau de dependência do paciente em relação à enfermagem.</li>
+              <li><strong>Plano Assistencial:</strong> Determinação global da assistência de enfermagem que o ser humano deve receber diante do diagnóstico estabelecido.</li>
+              <li><strong>Plano de Cuidados (Prescrição de Enfermagem):</strong> Roteiro diário/aprazado que coordena a ação da equipe de enfermagem nos cuidados adequados ao paciente.</li>
+              <li><strong>Evolução de Enfermagem:</strong> Relato diário (ou periódico) das mudanças sucessivas que ocorrem no ser humano sob assistência, avaliando a resposta ao plano.</li>
+              <li><strong>Prognóstico de Enfermagem:</strong> Estimativa da capacidade do ser humano em atender suas necessidades básicas alteradas após a implementação do plano assistencial.</li>
+            </ol>
+          </div>
+        `,
+        question: 'Qual etapa do Processo de Enfermagem de Wanda Horta consiste no roteiro diário aprazado que coordena as ações da equipe de enfermagem na execução dos cuidados?',
+        options: [
+          'Histórico de Enfermagem',
+          'Prognóstico de Enfermagem',
+          'Plano de Cuidados (Prescrição de Enfermagem)',
+          'Diagnóstico de Enfermagem'
+        ],
+        correctIndex: 2,
+        explanation: 'Excelente! O Plano de Cuidados (ou Prescrição de Enfermagem) operacionaliza o Plano Assistencial por meio do roteiro diário de ações da equipe.'
+      },
+
+      horta3: {
+        id: 'horta3',
+        wing: 'horta',
+        badge: 'Ala Wanda Horta • Leito 03',
+        title: '3. Conceitos Centrais e Assistir em Enfermagem',
+        headerGradient: 'from-emerald-700 to-teal-600',
+        speakerIcon: '👩‍🏫',
+        speakerName: 'Profa. Wanda de Aguiar Horta',
+        scenario: '“Para finalizar nossa ala, lembre-se: Enfermagem é a ciência e a arte de assistir o ser humano no atendimento de suas necessidades básicas, tornando-o independente desta assistência quando possível.”',
+        theoryHTML: `
+          <p>Para Wanda Horta, o ser humano é parte integrante do universo dinâmico, sujeito a estados de equilíbrio e desequilíbrio no tempo e no espaço.</p>
+          <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3.5 space-y-2">
+            <div class="font-bold text-emerald-900">O que significa "Assistir em Enfermagem"?</div>
+            <p class="text-slate-700">É fazer pelo ser humano aquilo que ele não pode fazer por si mesmo, utilizando 5 verbos/ações fundamentais conforme o grau de dependência:</p>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 text-center font-bold text-xs text-emerald-900">
+              <div class="bg-white p-2 rounded-lg border border-emerald-200">1. Fazer por</div>
+              <div class="bg-white p-2 rounded-lg border border-emerald-200">2. Ajudar</div>
+              <div class="bg-white p-2 rounded-lg border border-emerald-200">3. Orientar</div>
+              <div class="bg-white p-2 rounded-lg border border-emerald-200">4. Supervisionar</div>
+              <div class="bg-white p-2 rounded-lg border border-emerald-200 col-span-2 sm:col-span-2">5. Encaminhar a outros profissionais</div>
+            </div>
+          </div>
+        `,
+        question: 'Segundo o conceito de "Assistir em Enfermagem" de Wanda Horta, qual é o objetivo final da assistência prestada ao ser humano?',
+        options: [
+          'Manter o paciente permanentemente dependente dos cuidados hospitalares',
+          'Torná-lo independente desta assistência, quando possível, pelo ensino do autocuidado e recuperação do equilíbrio',
+          'Substituir integralmente a família em todas as decisões clínicas',
+          'Focar exclusivamente nas necessidades psicobiológicas visíveis'
+        ],
+        correctIndex: 1,
+        explanation: 'Isso mesmo! Horta define que a enfermagem assiste o ser humano para torná-lo independente desta assistência, quando possível, pelo ensino do autocuidado e recuperação do equilíbrio dinâmico.'
+      }
+    };
+
+    // Perguntas do Exame Final Integrado (Posto de Enfermagem Norte)
+    const FINAL_EXAM_QUESTIONS = [
+      {
+        title: 'Caso Clínico Integrado 1/3',
+        scenario: 'Sr. Antônio, 68 anos, internado por DPOC exacerbada, apresenta dispneia intensa (SatO2 86%), fadiga extrema e não consegue realizar sua higiene nem se alimentar sozinho.',
+        question: 'Integrando Horta e Orem, como classificamos respectivamente a necessidade prioritária afetada e o sistema de enfermagem indicado neste momento agudo?',
+        options: [
+          'NHB Psicossocial (Horta) e Sistema Apoio-Educação (Orem)',
+          'NHB Psicobiológica - Oxigenação (Horta) e Sistema Totalmente/Parcialmente Compensatório (Orem)',
+          'NHB Psicoespiritual (Horta) e Requisito de Desenvolvimento (Orem)',
+          'Prognóstico de Enfermagem (Horta) e Agência Plena (Orem)'
+        ],
+        correctIndex: 1,
+        explanation: 'Perfeito! A oxigenação é uma NHB Psicobiológica prioritária (Horta), e devido à fadiga e dispneia aguda, há déficit severo que exige intervenção compensatória da enfermagem (Orem).'
+      },
+      {
+        title: 'Caso Clínico Integrado 2/3',
+        scenario: 'Após estabilização clínica, Sr. Antônio recebe alta programada e precisa aprender a usar corretamente a bombinha inalatória (aerossol) em domicílio.',
+        question: 'Qual ação de "Assistir em Enfermagem" de Wanda Horta e qual Sistema de Enfermagem de Orem convergem nesta situação?',
+        options: [
+          '"Fazer por" (Horta) e Sistema Totalmente Compensatório (Orem)',
+          '"Orientar/Supervisionar" (Horta) e Sistema de Apoio-Educação (Orem)',
+          '"Encaminhar" (Horta) e Requisito Universal de Sono (Orem)',
+          '"Evolução" (Horta) e Déficit Total Irreversível (Orem)'
+        ],
+        correctIndex: 1,
+        explanation: 'Excelente! Tanto o "Orientar/Supervisionar" de Horta quanto o "Sistema de Apoio-Educação" de Orem visam capacitar o paciente para o autocuidado autônomo.'
+      },
+      {
+        title: 'Caso Clínico Integrado 3/3',
+        scenario: 'Durante a passagem de plantão, a enfermeira registra no prontuário a resposta diária do paciente às prescrições realizadas nas últimas 24 horas e estima sua capacidade futura de recuperação.',
+        question: 'Na sistematização proposta por Wanda Horta em 6 etapas, essas duas ações correspondem respectivamente a:',
+        options: [
+          'Histórico e Diagnóstico de Enfermagem',
+          'Plano Assistencial e Prescrição de Enfermagem',
+          'Evolução e Prognóstico de Enfermagem',
+          'Agência de Autocuidado e Demanda Terapêutica'
+        ],
+        correctIndex: 2,
+        explanation: 'Brilhante! A Evolução avalia as mudanças sucessivas do paciente nas 24h, e o Prognóstico estima sua capacidade de atender às necessidades básicas após o plano assistencial.'
+      }
+    ];
+
+    // =========================================================================
+    // 3. ESTADO GLOBAL DO JOGO E MAPA DO HOSPITAL
+    // =========================================================================
+    const TILE_SIZE = 48;
+    const MAP_COLS = 34;
+    const MAP_ROWS = 24;
+
+    // Legenda de Tiles:
+    // 0: Piso Corredor Central (Porcelanato Bege Claro)
+    // 1: Parede Externa / Estrutural (Azul-Ardósia Escuro)
+    // 2: Piso Ala Dorothea Orem (Azul Pastel Suave)
+    // 3: Piso Ala Wanda Horta (Verde Menta Pastel Suave)
+    // 4: Piso Posto de Enfermagem Norte (Dourado/Creme Suave)
+    // 5: Parede Interna Divisória
+    // 6: Tapete de Entrada / Sinalização
+    const hospitalMap = [];
+
+    function buildHospitalMap() {
+      for (let r = 0; r < MAP_ROWS; r++) {
+        const row = [];
+        for (let c = 0; c < MAP_COLS; c++) {
+          // Bordas externas
+          if (r === 0 || r === MAP_ROWS - 1 || c === 0 || c === MAP_COLS - 1) {
+            row.push(1);
+            continue;
+          }
+
+          // Ala Oeste: Dorothea Orem (Cols 1..10, Rows 2..21)
+          if (c >= 1 && c <= 10 && r >= 2 && r <= 21) {
+            // Parede divisória com corredor (Col 10), com abertura nas linhas 10..13
+            if (c === 10 && (r < 10 || r > 13)) {
+              row.push(5);
+            } else {
+              row.push(2);
+            }
+            continue;
+          }
+
+          // Ala Leste: Wanda Horta (Cols 23..32, Rows 2..21)
+          if (c >= 23 && c <= 32 && r >= 2 && r <= 21) {
+            // Parede divisória com corredor (Col 23), com abertura nas linhas 10..13
+            if (c === 23 && (r < 10 || r > 13)) {
+              row.push(5);
+            } else {
+              row.push(3);
+            }
+            continue;
+          }
+
+          // Posto Norte: Exame Final (Cols 12..21, Rows 1..6)
+          if (c >= 12 && c <= 21 && r >= 1 && r <= 6) {
+            if (r === 6 && (c < 15 || c > 18)) {
+              row.push(5);
+            } else {
+              row.push(4);
+            }
+            continue;
+          }
+
+          // Tapete da Recepção (Sul)
+          if (c >= 15 && c <= 18 && r >= 19 && r <= 21) {
+            row.push(6);
+            continue;
+          }
+
+          // Corredor Central
+          row.push(0);
+        }
+        hospitalMap.push(row);
+      }
+    }
+    buildHospitalMap();
+
+    // Móveis / Objetos sólidos decorativos e funcionais (com colisão)
+    const solidObjects = [
+      // Recepção Sul (Balcão)
+      { x: 14 * TILE_SIZE, y: 17.2 * TILE_SIZE, w: 6 * TILE_SIZE, h: 1.1 * TILE_SIZE, type: 'desk', label: 'RECEPÇÃO CENTRAL', color: '#0f766e' },
+      // Plantas decorativas no corredor
+      { x: 11.3 * TILE_SIZE, y: 7.3 * TILE_SIZE, w: 0.8 * TILE_SIZE, h: 0.8 * TILE_SIZE, type: 'plant' },
+      { x: 21.9 * TILE_SIZE, y: 7.3 * TILE_SIZE, w: 0.8 * TILE_SIZE, h: 0.8 * TILE_SIZE, type: 'plant' },
+      { x: 11.3 * TILE_SIZE, y: 15.3 * TILE_SIZE, w: 0.8 * TILE_SIZE, h: 0.8 * TILE_SIZE, type: 'plant' },
+      { x: 21.9 * TILE_SIZE, y: 15.3 * TILE_SIZE, w: 0.8 * TILE_SIZE, h: 0.8 * TILE_SIZE, type: 'plant' },
+
+      // Leitos Ala Dorothea Orem (Oeste)
+      { x: 2 * TILE_SIZE, y: 4 * TILE_SIZE, w: 2.4 * TILE_SIZE, h: 1.4 * TILE_SIZE, type: 'bed', wing: 'orem', bedNum: '01', patientColor: '#38bdf8' },
+      { x: 2 * TILE_SIZE, y: 11 * TILE_SIZE, w: 2.4 * TILE_SIZE, h: 1.4 * TILE_SIZE, type: 'bed', wing: 'orem', bedNum: '02', patientColor: '#818cf8' },
+      { x: 2 * TILE_SIZE, y: 18 * TILE_SIZE, w: 2.4 * TILE_SIZE, h: 1.4 * TILE_SIZE, type: 'bed', wing: 'orem', bedNum: '03', patientColor: '#2dd4bf' },
+
+      // Leitos Ala Wanda Horta (Leste)
+      { x: 29.6 * TILE_SIZE, y: 4 * TILE_SIZE, w: 2.4 * TILE_SIZE, h: 1.4 * TILE_SIZE, type: 'bed', wing: 'horta', bedNum: '01', patientColor: '#34d399' },
+      { x: 29.6 * TILE_SIZE, y: 11 * TILE_SIZE, w: 2.4 * TILE_SIZE, h: 1.4 * TILE_SIZE, type: 'bed', wing: 'horta', bedNum: '02', patientColor: '#fbbf24' },
+      { x: 29.6 * TILE_SIZE, y: 18 * TILE_SIZE, w: 2.4 * TILE_SIZE, h: 1.4 * TILE_SIZE, type: 'bed', wing: 'horta', bedNum: '03', patientColor: '#f472b6' },
+
+      // Bancada Exame Final (Posto Norte)
+      { x: 14.5 * TILE_SIZE, y: 2.4 * TILE_SIZE, w: 5 * TILE_SIZE, h: 1.2 * TILE_SIZE, type: 'examDesk', label: 'BANCA DE CERTIFICAÇÃO', color: '#b45309' }
+    ];
+
+    // Pontos Interativos (NPCs / Estações Clínicas / Placas)
+    const interactiveEntities = [
+      // Ala Orem (3 Estações)
+      {
+        id: 'orem1',
+        stationKey: 'orem1',
+        x: 5.2 * TILE_SIZE,
+        y: 4.7 * TILE_SIZE,
+        radius: 56,
+        name: 'Leito 01: Autocuidado',
+        npcType: 'orem_prof',
+        wing: 'orem'
+      },
+      {
+        id: 'orem2',
+        stationKey: 'orem2',
+        x: 5.2 * TILE_SIZE,
+        y: 11.7 * TILE_SIZE,
+        radius: 56,
+        name: 'Leito 02: Déficit Autocuidado',
+        npcType: 'patient_icon',
+        wing: 'orem'
+      },
+      {
+        id: 'orem3',
+        stationKey: 'orem3',
+        x: 5.2 * TILE_SIZE,
+        y: 18.7 * TILE_SIZE,
+        radius: 56,
+        name: 'Leito 03: Sistemas Enfermagem',
+        npcType: 'orem_prof',
+        wing: 'orem'
+      },
+
+      // Ala Horta (3 Estações)
+      {
+        id: 'horta1',
+        stationKey: 'horta1',
+        x: 28.8 * TILE_SIZE,
+        y: 4.7 * TILE_SIZE,
+        radius: 56,
+        name: 'Leito 01: NHB (Horta)',
+        npcType: 'horta_prof',
+        wing: 'horta'
+      },
+      {
+        id: 'horta2',
+        stationKey: 'horta2',
+        x: 28.8 * TILE_SIZE,
+        y: 11.7 * TILE_SIZE,
+        radius: 56,
+        name: 'Leito 02: Processo 6 Etapas',
+        npcType: 'patient_icon',
+        wing: 'horta'
+      },
+      {
+        id: 'horta3',
+        stationKey: 'horta3',
+        x: 28.8 * TILE_SIZE,
+        y: 18.7 * TILE_SIZE,
+        radius: 56,
+        name: 'Leito 03: Assistir Enfermagem',
+        npcType: 'horta_prof',
+        wing: 'horta'
+      },
+
+      // Recepcionista (Dica inicial)
+      {
+        id: 'receptionist',
+        type: 'info',
+        x: 17 * TILE_SIZE,
+        y: 16.3 * TILE_SIZE,
+        radius: 60,
+        name: 'Coordenação de Ensino',
+        npcType: 'coord',
+        wing: 'center'
+      },
+
+      // Posto Norte (Exame Final)
+      {
+        id: 'finalExam',
+        type: 'exam',
+        x: 17 * TILE_SIZE,
+        y: 4.3 * TILE_SIZE,
+        radius: 68,
+        name: 'Avaliação Final & Certificado',
+        npcType: 'exam_chief',
+        wing: 'exam'
+      }
+    ];
+
+    // Estado do Jogador e Progresso
+    const gameState = {
+      started: false,
+      modalOpen: false,
+      playerName: 'Enfermeiro(a)',
+      avatar: 'F', // 'F' ou 'M'
+      x: 17 * TILE_SIZE,
+      y: 20.2 * TILE_SIZE,
+      speed: 230, // pixels por segundo
+      dir: 'up', // 'up', 'down', 'left', 'right'
+      walkFrame: 0,
+      walkTimer: 0,
+      completedStations: {}, // ex: { orem1: true, ... }
+      score: 0,
+      attempts: 0,
+      correctAnswers: 0,
+      examCompleted: false,
+      currentExamStep: 0,
+      nearestEntity: null
+    };
+
+    // Controles de Teclado e Touch
+    const keys = {
+      ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false,
+      w: false, s: false, a: false, d: false,
+      W: false, S: false, A: false, D: false
+    };
+
+    window.addEventListener('keydown', (e) => {
+      if (keys.hasOwnProperty(e.key)) {
+        keys[e.key] = true;
+      }
+      if ((e.key === ' ' || e.key === 'e' || e.key === 'E' || e.key === 'Enter') && gameState.started && !gameState.modalOpen) {
+        e.preventDefault();
+        triggerInteraction();
+      }
+      if (e.key === 'Escape' && gameState.modalOpen) {
+        closeStationModal();
+        closeNotebookModal();
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (keys.hasOwnProperty(e.key)) {
+        keys[e.key] = false;
+      }
+    });
+
+    // Configurar botões virtuais D-Pad
+    function bindDpadButton(btnId, keyName) {
+      const btn = document.getElementById(btnId);
+      if (!btn) return;
+      const press = (e) => { e.preventDefault(); initAudio(); keys[keyName] = true; };
+      const release = (e) => { e.preventDefault(); keys[keyName] = false; };
+      btn.addEventListener('touchstart', press, { passive: false });
+      btn.addEventListener('touchend', release, { passive: false });
+      btn.addEventListener('mousedown', press);
+      btn.addEventListener('mouseup', release);
+      btn.addEventListener('mouseleave', release);
+    }
+
+    bindDpadButton('btnUp', 'ArrowUp');
+    bindDpadButton('btnDown', 'ArrowDown');
+    bindDpadButton('btnLeft', 'ArrowLeft');
+    bindDpadButton('btnRight', 'ArrowRight');
+
+    // =========================================================================
+    // 4. FLUXO DE TELAS, AVATAR E INTERAÇÕES
+    // =========================================================================
+    function selectAvatar(type) {
+      gameState.avatar = type;
+      const cardF = document.getElementById('selectNurseF');
+      const cardM = document.getElementById('selectNurseM');
+      if (type === 'F') {
+        cardF.className = 'avatar-card border-2 border-emerald-500 bg-emerald-50/70 rounded-2xl p-3.5 flex items-center gap-3 text-left transition';
+        cardM.className = 'avatar-card border-2 border-slate-200 hover:border-slate-300 bg-white rounded-2xl p-3.5 flex items-center gap-3 text-left transition';
+      } else {
+        cardM.className = 'avatar-card border-2 border-sky-500 bg-sky-50/70 rounded-2xl p-3.5 flex items-center gap-3 text-left transition';
+        cardF.className = 'avatar-card border-2 border-slate-200 hover:border-slate-300 bg-white rounded-2xl p-3.5 flex items-center gap-3 text-left transition';
+      }
+    }
+
+    function startGame() {
+      initAudio();
+      playSuccessSound();
+      const nameInput = document.getElementById('playerNameInput').value.trim();
+      gameState.playerName = nameInput || (gameState.avatar === 'F' ? 'Enfermeira Residente' : 'Enfermeiro Residente');
+      gameState.started = true;
+
+      document.getElementById('startScreen').classList.add('hidden');
+      document.getElementById('hud').classList.remove('hidden');
+      document.getElementById('mobileControls').classList.remove('hidden');
+      updateHUD();
+      showToast(`Bem-vindo(a), ${gameState.playerName}! Explore as alas Oeste (Orem) e Leste (Horta).`);
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toastBanner');
+      toast.textContent = msg;
+      toast.classList.remove('hidden');
+      clearTimeout(window._toastTimer);
+      window._toastTimer = setTimeout(() => {
+        toast.classList.add('hidden');
+      }, 4200);
+    }
+
+    function updateHUD() {
+      const completedCount = Object.keys(gameState.completedStations).length;
+      document.getElementById('hudProgressText').textContent = `${completedCount}/6`;
+      document.getElementById('hudProgressBar').style.width = `${(completedCount / 6) * 100}%`;
+      document.getElementById('hudScore').textContent = `${gameState.score} pts`;
+
+      // Identificar setor atual
+      const col = Math.floor(gameState.x / TILE_SIZE);
+      const row = Math.floor(gameState.y / TILE_SIZE);
+      let sectorName = 'Corredor Central';
+      if (col <= 10) sectorName = 'Ala Dorothea Orem (Oeste)';
+      else if (col >= 23) sectorName = 'Ala Wanda Horta (Leste)';
+      else if (row <= 6) sectorName = 'Posto de Avaliação Final';
+      else if (row >= 18) sectorName = 'Recepção do Hospital';
+
+      document.getElementById('hudSector').textContent = sectorName;
+    }
+
+    function triggerInteraction() {
+      if (!gameState.nearestEntity || gameState.modalOpen) return;
+      initAudio();
+      playInteractSound();
+      const ent = gameState.nearestEntity;
+
+      if (ent.type === 'info') {
+        showToast('💡 Dica: Visite os 3 leitos da Ala Oeste (Dorothea Orem) e os 3 leitos da Ala Leste (Wanda Horta), depois siga ao Posto Norte!');
+        return;
+      }
+
+      if (ent.type === 'exam') {
+        const completedCount = Object.keys(gameState.completedStations).length;
+        if (completedCount < 6) {
+          playErrorSound();
+          showToast(`🔒 Complete todas as 6 estações clínicas antes do Exame Final! (Progresso atual: ${completedCount}/6)`);
+          return;
+        }
+        if (gameState.examCompleted) {
+          openCertificateModal();
+          return;
+        }
+        gameState.currentExamStep = 0;
+        openExamStepModal();
+        return;
+      }
+
+      // Abrir Estação Clínica (Orem ou Horta)
+      openStationModal(ent.stationKey);
+    }
+
+    function openStationModal(stationKey) {
+      const data = STATIONS_DATA[stationKey];
+      if (!data) return;
+
+      gameState.modalOpen = true;
+      const modal = document.getElementById('stationModal');
+      const header = document.getElementById('modalHeader');
+      header.className = `p-5 md:p-6 text-white bg-gradient-to-r ${data.headerGradient} flex items-start justify-between gap-4`;
+
+      document.getElementById('modalBadge').textContent = data.badge;
+      document.getElementById('modalTitle').textContent = data.title;
+      document.getElementById('modalSpeakerIcon').textContent = data.speakerIcon;
+      document.getElementById('modalSpeakerName').textContent = data.speakerName;
+      document.getElementById('modalScenario').textContent = data.scenario;
+      document.getElementById('modalTheoryContent').innerHTML = data.theoryHTML;
+      document.getElementById('modalQuestion').textContent = data.question;
+
+      const feedbackEl = document.getElementById('modalFeedback');
+      feedbackEl.classList.add('hidden');
+      feedbackEl.innerHTML = '';
+
+      const alreadyDone = !!gameState.completedStations[stationKey];
+      document.getElementById('modalStatusPill').textContent = alreadyDone
+        ? '✅ Estação já validada no seu prontuário!'
+        : 'Responda ao caso clínico para validar esta estação';
+
+      const optionsContainer = document.getElementById('modalOptions');
+      optionsContainer.innerHTML = '';
+
+      data.options.forEach((optText, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'w-full text-left p-3.5 rounded-xl border-2 border-slate-200 hover:border-slate-400 bg-white hover:bg-slate-50 text-sm font-medium text-slate-800 transition flex items-start gap-3';
+        btn.innerHTML = `
+          <span class="w-6 h-6 rounded-lg bg-slate-100 border border-slate-300 flex items-center justify-center text-xs font-extrabold text-slate-700 shrink-0 mt-0.5">
+            ${String.fromCharCode(65 + idx)}
+          </span>
+          <span>${optText}</span>
+        `;
+        btn.onclick = () => handleStationAnswer(stationKey, idx, btn);
+        optionsContainer.appendChild(btn);
+      });
+
+      modal.classList.remove('hidden');
+    }
+
+    function handleStationAnswer(stationKey, selectedIndex, clickedBtn) {
+      const data = STATIONS_DATA[stationKey];
+      const feedbackEl = document.getElementById('modalFeedback');
+      const allBtns = document.getElementById('modalOptions').querySelectorAll('button');
+
+      gameState.attempts++;
+
+      if (selectedIndex === data.correctIndex) {
+        playSuccessSound();
+        gameState.correctAnswers++;
+
+        allBtns.forEach((b, i) => {
+          b.disabled = true;
+          if (i === data.correctIndex) {
+            b.className = 'w-full text-left p-3.5 rounded-xl border-2 border-emerald-500 bg-emerald-50 text-sm font-bold text-emerald-950 flex items-start gap-3';
+          } else {
+            b.className = 'w-full text-left p-3.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-400 opacity-60 flex items-start gap-3';
+          }
+        });
+
+        if (!gameState.completedStations[stationKey]) {
+          gameState.completedStations[stationKey] = true;
+          gameState.score += 150;
+          updateHUD();
+        }
+
+        feedbackEl.className = 'mt-4 p-4 rounded-2xl text-sm leading-relaxed border border-emerald-300 bg-emerald-50 text-emerald-950';
+        feedbackEl.innerHTML = `<strong>✅ Resposta Correta! (+150 pts)</strong><br>${data.explanation}`;
+        feedbackEl.classList.remove('hidden');
+
+        document.getElementById('modalStatusPill').textContent = '✅ Estação concluída com sucesso!';
+
+        const totalDone = Object.keys(gameState.completedStations).length;
+        if (totalDone === 6) {
+          setTimeout(() => {
+            showToast('🎉 Todas as 6 estações concluídas! Siga até o Posto Norte para o Exame Final!');
+          }, 600);
+        }
+      } else {
+        playErrorSound();
+        clickedBtn.className = 'w-full text-left p-3.5 rounded-xl border-2 border-rose-400 bg-rose-50 text-sm font-medium text-rose-900 flex items-start gap-3';
+        feedbackEl.className = 'mt-4 p-4 rounded-2xl text-sm leading-relaxed border border-rose-300 bg-rose-50 text-rose-950';
+        feedbackEl.innerHTML = `<strong>⚠️ Revise o conceito clínico:</strong><br>Releia o quadro teórico acima com atenção e tente novamente!`;
+        feedbackEl.classList.remove('hidden');
+      }
+    }
+
+    function closeStationModal() {
+      document.getElementById('stationModal').classList.add('hidden');
+      gameState.modalOpen = false;
+    }
+
+    // Exame Final Integrado
+    function openExamStepModal() {
+      const qData = FINAL_EXAM_QUESTIONS[gameState.currentExamStep];
+      gameState.modalOpen = true;
+
+      const modal = document.getElementById('stationModal');
+      const header = document.getElementById('modalHeader');
+      header.className = 'p-5 md:p-6 text-white bg-gradient-to-r from-amber-600 to-yellow-600 flex items-start justify-between gap-4';
+
+      document.getElementById('modalBadge').textContent = `Posto de Enfermagem • Exame Final (${gameState.currentExamStep + 1}/${FINAL_EXAM_QUESTIONS.length})`;
+      document.getElementById('modalTitle').textContent = qData.title;
+      document.getElementById('modalSpeakerIcon').textContent = '🏆';
+      document.getElementById('modalSpeakerName').textContent = 'Banca Avaliadora de Enfermagem';
+      document.getElementById('modalScenario').textContent = qData.scenario;
+      document.getElementById('modalTheoryContent').innerHTML = `
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs md:text-sm text-amber-950">
+          <strong>Desafio Integrador:</strong> Aplique simultaneamente os raciocínios clínicos de <strong>Dorothea E. Orem</strong> e <strong>Wanda de Aguiar Horta</strong>.
+        </div>
+      `;
+      document.getElementById('modalQuestion').textContent = qData.question;
+
+      const feedbackEl = document.getElementById('modalFeedback');
+      feedbackEl.classList.add('hidden');
+
+      const optionsContainer = document.getElementById('modalOptions');
+      optionsContainer.innerHTML = '';
+
+      qData.options.forEach((optText, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'w-full text-left p-3.5 rounded-xl border-2 border-slate-200 hover:border-amber-400 bg-white hover:bg-amber-50/40 text-sm font-medium text-slate-800 transition flex items-start gap-3';
+        btn.innerHTML = `
+          <span class="w-6 h-6 rounded-lg bg-amber-100 border border-amber-300 flex items-center justify-center text-xs font-extrabold text-amber-800 shrink-0 mt-0.5">
+            ${String.fromCharCode(65 + idx)}
+          </span>
+          <span>${optText}</span>
+        `;
+        btn.onclick = () => handleExamAnswer(idx, btn);
+        optionsContainer.appendChild(btn);
+      });
+
+      modal.classList.remove('hidden');
+    }
+
+    function handleExamAnswer(selectedIndex, clickedBtn) {
+      const qData = FINAL_EXAM_QUESTIONS[gameState.currentExamStep];
+      const feedbackEl = document.getElementById('modalFeedback');
+      const allBtns = document.getElementById('modalOptions').querySelectorAll('button');
+
+      gameState.attempts++;
+
+      if (selectedIndex === qData.correctIndex) {
+        playSuccessSound();
+        gameState.correctAnswers++;
+        gameState.score += 200;
+        updateHUD();
+
+        allBtns.forEach((b, i) => {
+          b.disabled = true;
+          if (i === qData.correctIndex) {
+            b.className = 'w-full text-left p-3.5 rounded-xl border-2 border-emerald-500 bg-emerald-50 text-sm font-bold text-emerald-950 flex items-start gap-3';
+          } else {
+            b.className = 'w-full text-left p-3.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-400 opacity-60 flex items-start gap-3';
+          }
+        });
+
+        const isLast = gameState.currentExamStep >= FINAL_EXAM_QUESTIONS.length - 1;
+        feedbackEl.className = 'mt-4 p-4 rounded-2xl text-sm leading-relaxed border border-emerald-300 bg-emerald-50 text-emerald-950';
+        feedbackEl.innerHTML = `
+          <strong>✅ Excelente Raciocínio Clínico! (+200 pts)</strong><br>${qData.explanation}
+          <div class="mt-3">
+            <button onclick="${isLast ? 'finishFinalExam()' : 'nextExamStep()'}" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs md:text-sm shadow transition">
+              ${isLast ? 'Emitir Certificado de Excelência 🏆' : 'Próximo Caso Clínico ▶'}
+            </button>
+          </div>
+        `;
+        feedbackEl.classList.remove('hidden');
+      } else {
+        playErrorSound();
+        clickedBtn.className = 'w-full text-left p-3.5 rounded-xl border-2 border-rose-400 bg-rose-50 text-sm font-medium text-rose-900 flex items-start gap-3';
+        feedbackEl.className = 'mt-4 p-4 rounded-2xl text-sm leading-relaxed border border-rose-300 bg-rose-50 text-rose-950';
+        feedbackEl.innerHTML = `<strong>⚠️ Analise novamente:</strong> Observe a correlação entre a necessidade afetada (Horta) e o grau de atuação no autocuidado (Orem).`;
+        feedbackEl.classList.remove('hidden');
+      }
+    }
+
+    function nextExamStep() {
+      gameState.currentExamStep++;
+      openExamStepModal();
+    }
+
+    function finishFinalExam() {
+      gameState.examCompleted = true;
+      closeStationModal();
+      openCertificateModal();
+    }
+
+    function openCertificateModal() {
+      playSuccessSound();
+      gameState.modalOpen = true;
+      document.getElementById('certPlayerName').textContent = gameState.playerName;
+      document.getElementById('certScore').textContent = `${gameState.score} pts`;
+      const acc = gameState.attempts > 0 ? Math.round((gameState.correctAnswers / gameState.attempts) * 100) : 100;
+      document.getElementById('certAccuracy').textContent = `${acc}%`;
+      document.getElementById('certificateModal').classList.remove('hidden');
+    }
+
+    function closeCertificateModal() {
+      document.getElementById('certificateModal').classList.add('hidden');
+      gameState.modalOpen = false;
+    }
+
+    function openNotebookModal() {
+      gameState.modalOpen = true;
+      const body = document.getElementById('notebookBody');
+      const list = Object.values(STATIONS_DATA);
+
+      body.innerHTML = list.map(st => {
+        const done = !!gameState.completedStations[st.id];
+        const wingColor = st.wing === 'orem' ? 'sky' : 'emerald';
+        return `
+          <div class="p-4 rounded-2xl border ${done ? `border-${wingColor}-300 bg-${wingColor}-50/60` : 'border-slate-200 bg-slate-50'} flex items-center justify-between gap-3">
+            <div>
+              <div class="text-xs font-bold uppercase text-${wingColor}-700">${st.badge}</div>
+              <div class="font-extrabold text-slate-900">${st.title}</div>
+            </div>
+            <span class="px-3 py-1 rounded-full text-xs font-extrabold ${done ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'}">
+              ${done ? '✓ Concluído' : 'Pendente'}
+            </span>
+          </div>
+        `;
+      }).join('');
+
+      document.getElementById('notebookModal').classList.remove('hidden');
+    }
+
+    function closeNotebookModal() {
+      document.getElementById('notebookModal').classList.add('hidden');
+      gameState.modalOpen = false;
+    }
+
+    function resetFullGame() {
+      gameState.x = 17 * TILE_SIZE;
+      gameState.y = 20.2 * TILE_SIZE;
+      gameState.completedStations = {};
+      gameState.score = 0;
+      gameState.attempts = 0;
+      gameState.correctAnswers = 0;
+      gameState.examCompleted = false;
+      gameState.currentExamStep = 0;
+      closeCertificateModal();
+      updateHUD();
+      showToast('Novo plantão iniciado! Boa jornada clínica.');
+    }
+
+    // =========================================================================
+    // 5. FÍSICA, COLISÃO E RENDERIZAÇÃO 2D NO CANVAS
+    // =========================================================================
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    function isTileWalkable(col, row) {
+      if (col < 0 || col >= MAP_COLS || row < 0 || row >= MAP_ROWS) return false;
+      const tile = hospitalMap[row][col];
+      return tile !== 1 && tile !== 5;
+    }
+
+    function checkCollision(nx, ny) {
+      const halfW = 14;
+      const halfH = 14;
+
+      // Checar os 4 cantos da hitbox do personagem nos tiles
+      const corners = [
+        { c: Math.floor((nx - halfW) / TILE_SIZE), r: Math.floor((ny - halfH) / TILE_SIZE) },
+        { c: Math.floor((nx + halfW) / TILE_SIZE), r: Math.floor((ny - halfH) / TILE_SIZE) },
+        { c: Math.floor((nx - halfW) / TILE_SIZE), r: Math.floor((ny + halfH) / TILE_SIZE) },
+        { c: Math.floor((nx + halfW) / TILE_SIZE), r: Math.floor((ny + halfH) / TILE_SIZE) }
+      ];
+
+      for (const pt of corners) {
+        if (!isTileWalkable(pt.c, pt.r)) return true;
+      }
+
+      // Checar colisão com móveis/leitos sólidos
+      for (const obj of solidObjects) {
+        if (
+          nx + halfW > obj.x &&
+          nx - halfW < obj.x + obj.w &&
+          ny + halfH > obj.y &&
+          ny - halfH < obj.y + obj.h
+        ) {
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    function updateGame(dt) {
+      if (!gameState.started || gameState.modalOpen) return;
+
+      let vx = 0;
+      let vy = 0;
+
+      if (keys.ArrowUp || keys.w || keys.W) vy -= 1;
+      if (keys.ArrowDown || keys.s || keys.S) vy += 1;
+      if (keys.ArrowLeft || keys.a || keys.A) vx -= 1;
+      if (keys.ArrowRight || keys.d || keys.D) vx += 1;
+
+      if (vx !== 0 || vy !== 0) {
+        // Normalizar diagonal
+        const len = Math.hypot(vx, vy);
+        vx /= len;
+        vy /= len;
+
+        if (Math.abs(vx) > Math.abs(vy)) {
+          gameState.dir = vx > 0 ? 'right' : 'left';
+        } else {
+          gameState.dir = vy > 0 ? 'down' : 'up';
+        }
+
+        const nextX = gameState.x + vx * gameState.speed * dt;
+        const nextY = gameState.y + vy * gameState.speed * dt;
+
+        if (!checkCollision(nextX, gameState.y)) gameState.x = nextX;
+        if (!checkCollision(gameState.x, nextY)) gameState.y = nextY;
+
+        gameState.walkTimer += dt;
+        if (gameState.walkTimer > 0.14) {
+          gameState.walkTimer = 0;
+          gameState.walkFrame = (gameState.walkFrame + 1) % 4;
+        }
+
+        updateHUD();
+      } else {
+        gameState.walkFrame = 0;
+      }
+
+      // Verificar proximidade com estações interativas
+      let closest = null;
+      let minDist = Infinity;
+
+      for (const ent of interactiveEntities) {
+        const d = Math.hypot(gameState.x - ent.x, gameState.y - ent.y);
+        if (d <= ent.radius && d < minDist) {
+          minDist = d;
+          closest = ent;
+        }
+      }
+
+      gameState.nearestEntity = closest;
+      const promptEl = document.getElementById('interactPrompt');
+      if (closest) {
+        document.getElementById('interactPromptText').textContent = `${closest.name} • Pressione ESPAÇO ou toque em EXAMINAR`;
+        promptEl.classList.remove('hidden');
+      } else {
+        promptEl.classList.add('hidden');
+      }
+    }
+
+    // =========================================================================
+    // 6. DESENHO DO CENÁRIO HOSPITALAR E PERSONAGENS
+    // =========================================================================
+    function drawHospitalMap(time) {
+      for (let r = 0; r < MAP_ROWS; r++) {
+        for (let c = 0; c < MAP_COLS; c++) {
+          const tile = hospitalMap[r][c];
+          const x = c * TILE_SIZE;
+          const y = r * TILE_SIZE;
+
+          if (tile === 1) {
+            // Parede Externa
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+            ctx.fillStyle = '#334155';
+            ctx.fillRect(x, y, TILE_SIZE, 10);
+          } else if (tile === 5) {
+            // Parede Divisória Interna
+            ctx.fillStyle = '#475569';
+            ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+            ctx.fillStyle = '#94a3b8';
+            ctx.fillRect(x + 4, y + 4, TILE_SIZE - 8, TILE_SIZE - 14);
+          } else {
+            // Pisos Hospitalares com rejunte sutil
+            if (tile === 0) ctx.fillStyle = '#f8fafc'; // Corredor
+            else if (tile === 2) ctx.fillStyle = '#e0f2fe'; // Ala Orem (Azul claro)
+            else if (tile === 3) ctx.fillStyle = '#dcfce7'; // Ala Horta (Verde claro)
+            else if (tile === 4) ctx.fillStyle = '#fef3c7'; // Posto Norte (Dourado claro)
+            else if (tile === 6) ctx.fillStyle = '#ccfbf1'; // Tapete Recepção
+
+            ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x, y, TILE_SIZE, TILE_SIZE);
+          }
+        }
+      }
+
+      // Pinturas de Sinalização no Chão (Wayfinding Hospitalar)
+      ctx.save();
+      ctx.textAlign = 'center';
+
+      // Setas e Rótulos no Corredor Central
+      ctx.fillStyle = '#0369a1';
+      ctx.font = 'bold 14px Inter, sans-serif';
+      ctx.fillText('◀ ALA DOROTHEA E. OREM', 13.5 * TILE_SIZE, 11.6 * TILE_SIZE);
+      ctx.font = '11px Inter, sans-serif';
+      ctx.fillText('(Teoria do Autocuidado)', 13.5 * TILE_SIZE, 12.1 * TILE_SIZE);
+
+      ctx.fillStyle = '#047857';
+      ctx.font = 'bold 14px Inter, sans-serif';
+      ctx.fillText('ALA WANDA A. HORTA ▶', 20.5 * TILE_SIZE, 11.6 * TILE_SIZE);
+      ctx.font = '11px Inter, sans-serif';
+      ctx.fillText('(Necessidades Humanas Básicas)', 20.5 * TILE_SIZE, 12.1 * TILE_SIZE);
+
+      ctx.fillStyle = '#b45309';
+      ctx.font = 'bold 14px Inter, sans-serif';
+      ctx.fillText('▲ POSTO DE AVALIAÇÃO FINAL', 17 * TILE_SIZE, 8.2 * TILE_SIZE);
+
+      // Títulos das Enfermarias no Piso
+      ctx.fillStyle = 'rgba(3, 105, 161, 0.22)';
+      ctx.font = '900 22px Inter, sans-serif';
+      ctx.fillText('ENFERMARIA OREM', 5.5 * TILE_SIZE, 2.9 * TILE_SIZE);
+
+      ctx.fillStyle = 'rgba(4, 120, 87, 0.22)';
+      ctx.fillText('ENFERMARIA HORTA', 28.5 * TILE_SIZE, 2.9 * TILE_SIZE);
+      ctx.restore();
+
+      // Desenhar Objetos Sólidos (Leitos, Bancadas, Plantas)
+      for (const obj of solidObjects) {
+        if (obj.type === 'bed') {
+          drawHospitalBed(obj, time);
+        } else if (obj.type === 'desk' || obj.type === 'examDesk') {
+          drawCounterDesk(obj);
+        } else if (obj.type === 'plant') {
+          drawPlant(obj);
+        }
+      }
+    }
+
+    function drawHospitalBed(bed, time) {
+      const { x, y, w, h, bedNum, patientColor } = bed;
+      // Sombra
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.14)';
+      ctx.beginPath();
+      ctx.roundRect(x + 4, y + 6, w, h, 10);
+      ctx.fill();
+
+      // Estrutura metálica da maca
+      ctx.fillStyle = '#cbd5e1';
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 10);
+      ctx.fill();
+      ctx.strokeStyle = '#64748b';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Colchão branco
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.roundRect(x + 6, y + 5, w - 12, h - 10, 7);
+      ctx.fill();
+
+      // Travesseiro
+      ctx.fillStyle = '#e2e8f0';
+      ctx.beginPath();
+      ctx.roundRect(x + 10, y + 12, 22, h - 24, 5);
+      ctx.fill();
+
+      // Cobertor colorido
+      ctx.fillStyle = patientColor;
+      ctx.beginPath();
+      ctx.roundRect(x + 42, y + 8, w - 52, h - 16, 6);
+      ctx.fill();
+
+      // Cabeça do paciente deitado
+      ctx.fillStyle = '#fed7aa';
+      ctx.beginPath();
+      ctx.arc(x + 24, y + h / 2, 10, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Monitor Multiparamétrico ao lado do leito
+      const monX = x + 6;
+      const monY = y - 18;
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.roundRect(monX, monY, 34, 16, 4);
+      ctx.fill();
+
+      // Linha ECG animada
+      ctx.strokeStyle = '#22c55e';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      const pulse = Math.sin(time * 8) * 3;
+      ctx.moveTo(monX + 4, monY + 8);
+      ctx.lineTo(monX + 12, monY + 8);
+      ctx.lineTo(monX + 16, monY + 3 + pulse);
+      ctx.lineTo(monX + 20, monY + 13 - pulse);
+      ctx.lineTo(monX + 24, monY + 8);
+      ctx.lineTo(monX + 30, monY + 8);
+      ctx.stroke();
+
+      // Número do Leito
+      ctx.fillStyle = '#334155';
+      ctx.font = 'bold 10px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`LEITO ${bedNum}`, x + w / 2, y + h + 13);
+    }
+
+    function drawCounterDesk(desk) {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.16)';
+      ctx.beginPath();
+      ctx.roundRect(desk.x + 4, desk.y + 6, desk.w, desk.h, 12);
+      ctx.fill();
+
+      ctx.fillStyle = desk.color;
+      ctx.beginPath();
+      ctx.roundRect(desk.x, desk.y, desk.w, desk.h, 12);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.fillRect(desk.x + 8, desk.y + 5, desk.w - 16, 8);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 12px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(desk.label, desk.x + desk.w / 2, desk.y + desk.h / 2 + 4);
+    }
+
+    function drawPlant(plant) {
+      const cx = plant.x + plant.w / 2;
+      const cy = plant.y + plant.h / 2;
+      ctx.fillStyle = '#9a3412';
+      ctx.beginPath();
+      ctx.arc(cx, cy + 4, 13, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#16a34a';
+      ctx.beginPath();
+      ctx.arc(cx - 5, cy - 3, 10, 0, Math.PI * 2);
+      ctx.arc(cx + 6, cy - 2, 10, 0, Math.PI * 2);
+      ctx.arc(cx, cy - 8, 11, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawInteractiveNPCs(time) {
+      for (const ent of interactiveEntities) {
+        const isDone = ent.stationKey ? !!gameState.completedStations[ent.stationKey] : (ent.type === 'exam' && gameState.examCompleted);
+        const bob = Math.sin(time * 3 + ent.x) * 2.5;
+
+        // Aura interativa no chão
+        ctx.beginPath();
+        ctx.arc(ent.x, ent.y + 12, 22 + Math.sin(time * 4) * 2, 0, Math.PI * 2);
+        if (isDone) {
+          ctx.fillStyle = 'rgba(16, 185, 129, 0.25)';
+        } else if (ent.wing === 'orem') {
+          ctx.fillStyle = 'rgba(14, 165, 233, 0.25)';
+        } else if (ent.wing === 'horta') {
+          ctx.fillStyle = 'rgba(16, 185, 129, 0.25)';
+        } else {
+          ctx.fillStyle = 'rgba(245, 158, 11, 0.28)';
+        }
+        ctx.fill();
+
+        // Corpo do NPC
+        let coatColor = '#ffffff';
+        let hairColor = '#475569';
+        if (ent.wing === 'orem') hairColor = '#64748b';
+        if (ent.wing === 'horta') hairColor = '#1e293b';
+        if (ent.type === 'exam') coatColor = '#fef3c7';
+
+        // Sombra
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.beginPath();
+        ctx.ellipse(ent.x, ent.y + 16, 13, 6, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Jaleco
+        ctx.fillStyle = coatColor;
+        ctx.beginPath();
+        ctx.roundRect(ent.x - 11, ent.y - 4 + bob, 22, 20, 6);
+        ctx.fill();
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Cabeça
+        ctx.fillStyle = '#fed7aa';
+        ctx.beginPath();
+        ctx.arc(ent.x, ent.y - 12 + bob, 10, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Cabelo
+        ctx.fillStyle = hairColor;
+        ctx.beginPath();
+        ctx.arc(ent.x, ent.y - 15 + bob, 10, Math.PI, Math.PI * 2);
+        ctx.fill();
+
+        // Balão de Status acima da cabeça (! ou ✓)
+        const badgeY = ent.y - 34 + bob;
+        ctx.fillStyle = isDone ? '#10b981' : (ent.type === 'exam' ? '#f59e0b' : '#0284c7');
+        ctx.beginPath();
+        ctx.roundRect(ent.x - 12, badgeY - 10, 24, 18, 8);
+        ctx.fill();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 12px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(isDone ? '✓' : '!', ent.x, badgeY + 3);
+
+        // Etiqueta com nome da estação
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+        ctx.beginPath();
+        ctx.roundRect(ent.x - 68, ent.y + 22, 136, 18, 6);
+        ctx.fill();
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = '600 10px Inter, sans-serif';
+        ctx.fillText(ent.name, ent.x, ent.y + 34);
+      }
+    }
+
+    function drawPlayer() {
+      const { x, y, walkFrame, avatar } = gameState;
+      const stepOffset = (walkFrame === 1 || walkFrame === 3) ? -3 : 0;
+      const leftFootY = walkFrame === 1 ? -3 : 0;
+      const rightFootY = walkFrame === 3 ? -3 : 0;
+
+      // Sombra no chão
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.25)';
+      ctx.beginPath();
+      ctx.ellipse(x, y + 17, 14, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Pés / Sapatos hospitalares
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.roundRect(x - 9, y + 12 + leftFootY, 7, 6, 3);
+      ctx.roundRect(x + 2, y + 12 + rightFootY, 7, 6, 3);
+      ctx.fill();
+
+      // Corpo / Jaleco Branco de Enfermagem
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.roundRect(x - 12, y - 5 + stepOffset, 24, 20, 7);
+      ctx.fill();
+      ctx.strokeStyle = '#0f766e';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Scrub interno (verde-esmeralda)
+      ctx.fillStyle = '#10b981';
+      ctx.beginPath();
+      ctx.moveTo(x - 4, y - 5 + stepOffset);
+      ctx.lineTo(x + 4, y - 5 + stepOffset);
+      ctx.lineTo(x, y + 4 + stepOffset);
+      ctx.closePath();
+      ctx.fill();
+
+      // Estetoscópio no pescoço
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y - 2 + stepOffset, 6, 0.1 * Math.PI, 0.9 * Math.PI);
+      ctx.stroke();
+
+      // Cabeça
+      ctx.fillStyle = '#fdba74';
+      ctx.beginPath();
+      ctx.arc(x, y - 14 + stepOffset, 10.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Cabelo diferenciado por avatar
+      ctx.fillStyle = avatar === 'F' ? '#7c2d12' : '#1e293b';
+      ctx.beginPath();
+      ctx.arc(x, y - 16 + stepOffset, 10.5, Math.PI, Math.PI * 2);
+      ctx.fill();
+      if (avatar === 'F') {
+        // Coque / cabelo longo lateral
+        ctx.beginPath();
+        ctx.arc(x + 9, y - 15 + stepOffset, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Olhos (conforme direção)
+      ctx.fillStyle = '#0f172a';
+      if (gameState.dir !== 'up') {
+        const eyeOffsetX = gameState.dir === 'left' ? -3 : (gameState.dir === 'right' ? 3 : 0);
+        ctx.beginPath();
+        ctx.arc(x - 3.5 + eyeOffsetX, y - 13 + stepOffset, 1.5, 0, Math.PI * 2);
+        ctx.arc(x + 3.5 + eyeOffsetX, y - 13 + stepOffset, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawMiniMap() {
+      if (!gameState.started) return;
+      const scale = 4.2;
+      const mw = MAP_COLS * scale;
+      const mh = MAP_ROWS * scale;
+      const mx = canvas.width - mw - 16;
+      const my = 78;
+
+      if (canvas.width < 640) return; // Ocultar minimapa em telas muito pequenas para limpar a visão
+
+      ctx.save();
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.beginPath();
+      ctx.roundRect(mx - 6, my - 6, mw + 12, mh + 12, 10);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      for (let r = 0; r < MAP_ROWS; r++) {
+        for (let c = 0; c < MAP_COLS; c++) {
+          const t = hospitalMap[r][c];
+          if (t === 1 || t === 5) ctx.fillStyle = '#475569';
+          else if (t === 2) ctx.fillStyle = '#38bdf8';
+          else if (t === 3) ctx.fillStyle = '#34d399';
+          else if (t === 4) ctx.fillStyle = '#fbbf24';
+          else ctx.fillStyle = '#cbd5e1';
+          ctx.fillRect(mx + c * scale, my + r * scale, scale, scale);
+        }
+      }
+
+      // Pontos das estações no minimapa
+      for (const ent of interactiveEntities) {
+        if (!ent.stationKey && ent.type !== 'exam') continue;
+        const done = ent.stationKey ? !!gameState.completedStations[ent.stationKey] : gameState.examCompleted;
+        ctx.fillStyle = done ? '#10b981' : '#ef4444';
+        ctx.beginPath();
+        ctx.arc(mx + (ent.x / TILE_SIZE) * scale, my + (ent.y / TILE_SIZE) * scale, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Posição do Jogador
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(mx + (gameState.x / TILE_SIZE) * scale, my + (gameState.y / TILE_SIZE) * scale, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function render(timestamp) {
+      const time = timestamp / 1000;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Fundo externo ao hospital
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Câmera centrada no jogador com limites suaves
+      const mapPixelW = MAP_COLS * TILE_SIZE;
+      const mapPixelH = MAP_ROWS * TILE_SIZE;
+
+      let camX = gameState.x - canvas.width / 2;
+      let camY = gameState.y - canvas.height / 2;
+
+      if (mapPixelW > canvas.width) {
+        camX = Math.max(0, Math.min(camX, mapPixelW - canvas.width));
+      } else {
+        camX = -(canvas.width - mapPixelW) / 2;
+      }
+
+      if (mapPixelH > canvas.height) {
+        camY = Math.max(0, Math.min(camY, mapPixelH - canvas.height));
+      } else {
+        camY = -(canvas.height - mapPixelH) / 2;
+      }
+
+      ctx.save();
+      ctx.translate(-camX, -camY);
+
+      drawHospitalMap(time);
+      drawInteractiveNPCs(time);
+      drawPlayer();
+
+      ctx.restore();
+
+      drawMiniMap();
+    }
+
+    // Loop Principal de Animação
+    let lastTimestamp = 0;
+    function gameLoop(timestamp) {
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      const dt = Math.min((timestamp - lastTimestamp) / 1000, 0.05);
+      lastTimestamp = timestamp;
+
+      updateGame(dt);
+      render(timestamp);
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    window.onload = function () {
+      resizeCanvas();
+      requestAnimationFrame(gameLoop);
+    };
+  </script>
+</body>
+</html>
