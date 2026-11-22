@@ -3064,7 +3064,7 @@ function render() {
   if (isMobile) {
     // Zoom ampliado no mobile centrado no jogador (com limites para não mostrar fora do mapa 960x608)
     const isLandscape = window.innerWidth > window.innerHeight;
-    const zoom = isLandscape ? 1.55 : 1.42;
+    const zoom = isLandscape ? 1.25 : 1.18;
     const viewW = canvas.width / zoom;
     const viewH = canvas.height / zoom;
     const pCenterX = gameState.player.x + gameState.player.w / 2;
