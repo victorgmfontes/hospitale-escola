@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Fluxograma Interativo — Hospital-Escola Dorothea Orem e Wanda Horta</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #060b14;
+    --surface: #0f172a;
+    --surface-2: #162033;
+    --border: #26354d;
+    --cyan: #38bdf8;
+    --emerald: #10b981;
+    --rose: #f43f5e;
+    --amber: #f59e0b;
+    --violet: #a78bfa;
+  }
+
+  * {
+    box-sizing: border-box;
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: var(--bg);
+    color: #f8fafc;
+  }
+
+  /* Fundo com grade sutil idêntica ao organograma */
+  .grid-bg {
+    background-color: #060b14;
+    background-image:
+      radial-gradient(circle at 15% 15%, rgba(2, 132, 199, 0.16), transparent 40%),
+      radial-gradient(circle at 85% 85%, rgba(16, 185, 129, 0.12), transparent 42%),
+      linear-gradient(to right, rgba(38, 53, 77, 0.24) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(38, 53, 77, 0.24) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 36px 36px, 36px 36px;
+  }
+
+  /* Animação do fluxo das setas SVG */
+  @keyframes dashFlow {
+    to {
+      stroke-dashoffset: -24;
+    }
+  }
+
+  .edge-flow {
+    stroke-dasharray: 6 6;
+    animation: dashFlow 1.1s linear infinite;
+  }
+
+  .edge-active {
+    filter: drop-shadow(0 0 6px currentColor);
+    stroke-width: 3.2px !important;
+  }
+
+  .edge-dimmed {
+    opacity: 0.16;
+  }
+
+  /* Cartões dos Nós do Fluxograma */
+  .flow-node {
+    position: absolute;
+    width: 255px;
+    background: rgba(15, 23, 42, 0.96);
+    border: 1.5px solid #26354d;
+    border-radius: 14px;
+    padding: 13px 14px;
+    cursor: pointer;
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, opacity 0.25s ease;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.55);
+    user-select: none;
+  }
+
+  .flow-node:hover {
+    transform: translateY(-3px) scale(1.015);
+    z-index: 20;
+  }
+
+  .flow-node.selected {
+    transform: scale(1.03);
+    z-index: 25;
+  }
+
+  .flow-node.dimmed {
+    opacity: 0.22;
+    filter: grayscale(0.6);
+  }
+
+  /* Variantes de cores por categoria */
+  .node-cyan { border-top: 4px solid #38bdf8; }
+  .node-cyan:hover, .node-cyan.selected {
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.35), 0 16px 34px rgba(2, 132, 199, 0.35);
+  }
+
+  .node-emerald { border-top: 4px solid #10b981; }
+  .node-emerald:hover, .node-emerald.selected {
+    border-color: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.35), 0 16px 34px rgba(16, 185, 129, 0.3);
+  }
+
+  .node-rose { border-top: 4px solid #f43f5e; }
+  .node-rose:hover, .node-rose.selected {
+    border-color: #f43f5e;
+    box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.35), 0 16px 34px rgba(244, 63, 94, 0.3);
+  }
+
+  .node-violet { border-top: 4px solid #a78bfa; }
+  .node-violet:hover, .node-violet.selected {
+    border-color: #a78bfa;
+    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.35), 0 16px 34px rgba(167, 139, 250, 0.3);
+  }
+
+  .node-amber { border-top: 4px solid #f59e0b; }
+  .node-amber:hover, .node-amber.selected {
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.35), 0 16px 34px rgba(245, 158, 11, 0.3);
+  }
+
+  /* Colunas/Rótulos das Trilhas no Canvas */
+  .track-header {
+    position: absolute;
+    top: 24px;
+    height: 36px;
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid #26354d;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    pointer-events: none;
+  }
+
+  /* Scrollbar customizada */
+  .custom-scroll::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scroll::-webkit-scrollbar-track {
+    background: #090e1a;
+  }
+  .custom-scroll::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 999px;
+  }
+  .custom-scroll::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+  }
+
+  #viewport {
+    cursor: grab;
+  }
+  #viewport:active {
+    cursor: grabbing;
+  }
+</style>
+</head>
+<body class="flex flex-col h-screen w-screen overflow-hidden select-none">
+
+  <!-- BARRA SUPERIOR: TÍTULO, FILTROS DE CATEGORIA E SIMULADOR -->
+  <header class="bg-slate-950/95 border-b border-slate-800 px-3 md:px-5 py-2.5 z-30 flex flex-wrap items-center justify-between gap-2.5 shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-sky-500/15 border border-sky-400/40 flex items-center justify-center text-lg shrink-0">
+        🏥
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm md:text-base font-black tracking-tight text-white">
+            Fluxograma Interativo — Hospital-Escola Dorothea Orem e Wanda Horta
+          </h1>
+          <span class="hidden xl:inline-block text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-400/30">
+            Mapa de Conexões &amp; Lógica
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-400 hidden sm:block">
+          Clique em qualquer nó para inspecionar diálogos e gatilhos, filtre por trilha ou simule a jornada passo a passo.
+        </p>
+      </div>
+    </div>
+
+    <!-- Filtros de Categoria -->
+    <div class="flex items-center gap-1.5 overflow-x-auto max-w-full py-0.5" id="filterBar">
+      <button data-filter="all" onclick="setFilter('all')" class="filter-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-sky-500 text-slate-950 transition whitespace-nowrap">
+        Todos (11)
+      </button>
+      <button data-filter="principal" onclick="setFilter('principal')" class="filter-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 transition whitespace-nowrap">
+        🔵 Fluxo Principal
+      </button>
+      <button data-filter="alas" onclick="setFilter('alas')" class="filter-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 transition whitespace-nowrap">
+        🟢 Alas Clínicas &amp; UTI
+      </button>
+      <button data-filter="missoes" onclick="setFilter('missoes')" class="filter-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 transition whitespace-nowrap">
+        🟣 Missões &amp; Prancheta
+      </button>
+      <button data-filter="avaliacao" onclick="setFilter('avaliacao')" class="filter-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 transition whitespace-nowrap">
+        🟡 Avaliação &amp; Certificado
+      </button>
+    </div>
+  </header>
+
+  <!-- ÁREA PRINCIPAL: CANVAS INTERATIVO + PAINEL INSPETOR LATERAL -->
+  <div class="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
+
+    <!-- VIEWPORT DO FLUXOGRAMA (PAN + ZOOM) -->
+    <div id="viewport" class="flex-1 relative overflow-hidden grid-bg">
+
+      <!-- Barra Flutuante de Simulação Passo a Passo -->
+      <div class="absolute top-3 left-3 right-3 md:right-auto z-20 bg-slate-900/95 backdrop-blur-md border border-slate-700 rounded-2xl px-3.5 py-2 shadow-2xl flex flex-wrap items-center gap-2.5">
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="text-xs font-extrabold text-slate-200">Simular Jornada:</span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button onclick="stepJourney(-1)" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs font-bold text-slate-200 transition">
+            ◀ Anterior
+          </button>
+          <span id="stepCounter" class="px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-800 text-xs font-extrabold text-amber-400 min-w-[76px] text-center">
+            Etapa 1/11
+          </span>
+          <button onclick="stepJourney(1)" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition">
+            Próximo ▶
+          </button>
+        </div>
+      </div>
+
+      <!-- Controles de Zoom no canto inferior esquerdo -->
+      <div class="absolute bottom-3 left-3 z-20 bg-slate-900/95 backdrop-blur-md border border-slate-700 rounded-xl p-1.5 shadow-2xl flex items-center gap-1">
+        <button onclick="changeZoom(-0.12)" title="Diminuir Zoom" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-base transition">
+          −
+        </button>
+        <span id="zoomLabel" class="px-2 text-xs font-bold text-slate-300 min-w-[48px] text-center">85%</span>
+        <button onclick="changeZoom(0.12)" title="Aumentar Zoom" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-base transition">
+          +
+        </button>
+        <div class="w-px h-5 bg-slate-700 mx-0.5"></div>
+        <button onclick="fitToScreen()" title="Ajustar Fluxograma à Tela" class="px-2.5 h-8 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 text-sky-300 text-xs font-bold transition">
+          Ajustar à Tela
+        </button>
+      </div>
+
+      <!-- Legenda de Cores no canto inferior direito do canvas -->
+      <div class="hidden sm:flex absolute bottom-3 right-3 z-20 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-xl px-3 py-1.5 text-[11px] font-semibold text-slate-300 items-center gap-3 shadow-xl">
+        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>Entrada/Hub</span>
+        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>Alas Teóricas</span>
+        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>Terapia Intensiva</span>
+        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-violet-400"></span>Missões/Prancheta</span>
+        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>Certificação</span>
+      </div>
+
+      <!-- PALCO TRANSFORMÁVEL (1620 x 820) -->
+      <div id="stage" style="width: 1620px; height: 820px; transform-origin: 0 0; position: absolute; top: 0; left: 0;">
+        <!-- Cabeçalhos das 4 Trilhas -->
+        <div class="track-header text-sky-300 border-sky-500/30" style="left: 40px; width: 255px;">
+          Trilha 1 • Entrada &amp; Hub
+        </div>
+        <div class="track-header text-emerald-300 border-emerald-500/30" style="left: 365px; width: 255px;">
+          Trilha 2 • Portas &amp; Alas Clínicas
+        </div>
+        <div class="track-header text-violet-300 border-violet-500/30" style="left: 710px; width: 255px;">
+          Trilha 3 • Missões &amp; Prancheta
+        </div>
+        <div class="track-header text-amber-300 border-amber-500/30" style="left: 1055px; width: 525px;">
+          Trilha 4 • Convergência &amp; Certificação Final
+        </div>
+
+        <!-- Camada SVG para as conexões curvas Bézier e setas -->
+        <svg id="edgesSvg" width="1620" height="820" class="absolute inset-0 pointer-events-none" style="z-index: 1;"></svg>
+
+        <!-- Camada HTML para os Nós Interativos -->
+        <div id="nodesLayer" class="absolute inset-0" style="z-index: 5;"></div>
+      </div>
+    </div>
+
+    <!-- PAINEL INSPETOR LATERAL (DETALHES DO NÓ SELECIONADO) -->
+    <aside id="inspectorPanel" class="w-full lg:w-[390px] xl:w-[420px] h-[44vh] lg:h-full bg-slate-950 border-t lg:border-t-0 lg:border-l border-slate-800 flex flex-col z-20 shrink-0">
+      <div class="p-4 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between gap-2">
+        <div>
+          <div id="inspCategory" class="text-[10px] font-black uppercase tracking-widest text-sky-400">
+            Trilha 1 • Fluxo Principal
+          </div>
+          <h2 id="inspTitle" class="text-base md:text-lg font-extrabold text-white mt-0.5 leading-snug">
+            1. Tela Inicial &amp; Identidade
+          </h2>
+        </div>
+        <span id="inspBadge" class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold bg-sky-500/20 text-sky-300 border border-sky-400/30 shrink-0">
+          Início / ESC
+        </span>
+      </div>
+
+      <div id="inspBody" class="p-4 overflow-y-auto custom-scroll space-y-3.5 flex-1 text-xs md:text-[13px] leading-relaxed">
+        <!-- Preenchido dinamicamente via JavaScript -->
+      </div>
+    </aside>
+
+  </div>
+
+<script>
+  // =========================================================================
+  // 1. DADOS COMPLETOS DOS NÓS E CONEXÕES DO FLUXOGRAMA
+  // =========================================================================
+  const NODES = [
+    // TRILHA 1: ENTRADA & HUB
+    {
+      id: 'tela_inicial',
+      step: 1,
+      track: 'Trilha 1 • Entrada & Hub',
+      category: 'principal',
+      color: 'cyan',
+      badge: 'Início / Tecla ESC',
+      title: '1. Tela Inicial & Identidade',
+      shortDesc: 'Personalização do estudante, créditos acadêmicos e reinício completo.',
+      x: 40,
+      y: 115,
+      sectorRole: 'Menu de Entrada • Centro Universitário São Miguel (Bacharelado em Enfermagem — 2º Período Manhã)',
+      dialogues: [
+        'Exibe o emblema do Hospital-Escola Dorothea Orem e Wanda Horta e a lista dos 5 desenvolvedores da disciplina de História da Enfermagem.',
+        'Permite digitar o nome do personagem e escolher a aparência Feminina ou Masculina no jaleco.'
+      ],
+      triggersIn: [
+        'Abertura do arquivo do minigame no navegador.',
+        'Pressionar a tecla ESC ou clicar em "Reiniciar" a qualquer momento do plantão.'
+      ],
+      playerActions: [
+        'Preencher nome do estudante no crachá e selecionar sexo/aparência.',
+        'Clicar em "Entrar no Hospital-Escola" para iniciar a partida.'
+      ],
+      outputs: [
+        'Teleporta o jogador para o centro da Recepção Central com 30 novos pacientes sorteados aleatoriamente.'
+      ]
+    },
+    {
+      id: 'recepcao',
+      step: 2,
+      track: 'Trilha 1 • Entrada & Hub',
+      category: 'principal',
+      color: 'cyan',
+      badge: 'Hub Central',
+      title: '2. Recepção Central & Espera',
+      shortDesc: 'Recepcionista Clara, Dr. Victor Fontes, acompanhantes e portas dos setores.',
+      x: 40,
+      y: 385,
+      sectorRole: 'Recepcionista Clara • Dr. Victor Fontes (Preceptor Clínico) • 6 Acompanhantes e Visitantes',
+      dialogues: [
+        'Recepcionista Clara: "Olá! Explore as 4 portas: Oeste (Ala Dorothea Orem), Leste (Ala Wanda Horta), Norte-Esquerda (Unidade de Terapia Intensiva) e Norte-Direita (Coordenação)."',
+        'Dr. Victor Fontes: "Para conquistar seu Estetoscópio Littmann Classic III, realize a ausculta e checagem de sinais vitais em 3 leitos e volte falar comigo."',
+        'Acompanhantes e Visitantes (Dona Rosa, Sr. Paulo, Mariana, Sr. Antônio, Carlos e Beatriz): compartilham relatos sobre acolhimento e humanização.'
+      ],
+      triggersIn: [
+        'Entrada vinda da Tela Inicial.',
+        'Retorno pelas portas das alas clínicas, Unidade de Terapia Intensiva ou Coordenação.'
+      ],
+      playerActions: [
+        'Conversar com a Recepcionista Clara e aceitar a missão do Dr. Victor Fontes.',
+        'Atravessar uma das 4 portas iluminadas para acessar os setores clínicos.'
+      ],
+      outputs: [
+        'Conecta diretamente à Ala Dorothea Orem, Ala Wanda Horta, Unidade de Terapia Intensiva, Missão Littmann e Coordenação.'
+      ]
+    },
+
+    // TRILHA 2: PORTAS & ALAS CLÍNICAS
+    {
+      id: 'ala_orem',
+      step: 3,
+      track: 'Trilha 2 • Alas Clínicas',
+      category: 'alas',
+      color: 'emerald',
+      badge: '10 Leitos • Oeste',
+      title: '3. Ala Dorothea Orem',
+      shortDesc: 'Enf. Camila Lins (móvel), Técnicos Marcos e Juliana, 10 leitos e prescrição.',
+      x: 365,
+      y: 95,
+      sectorRole: 'Enf. Camila Lins (circulando) • Técnicos de Enfermagem Marcos e Juliana (circulando)',
+      dialogues: [
+        'Enf. Camila Lins: Explica a Teoria do Déficit de Autocuidado (relação entre Agência de Autocuidado e Demanda Terapêutica), os sistemas Totalmente Compensatório, Parcialmente Compensatório e Apoio-Educação, exemplo de Doença Pulmonar Obstrutiva Crônica e fontes científicas.',
+        'Téc. Marcos & Téc. Juliana: Comentam rotinas de banho assistido, sinais vitais, curativos e preparo de medicações.'
+      ],
+      triggersIn: [
+        'Entrar pela porta Oeste da Recepção Central.'
+      ],
+      playerActions: [
+        'Falar com Enf. Camila Lins para salvar automaticamente a teoria em Minhas Anotações.',
+        'Avaliar os 10 pacientes (OREM-01 a OREM-10), resolver alertas de sinais vitais (hipoxemia, hiperglicemia, crise hipertensiva, febre) e assinar a prescrição no leito OREM-02.'
+      ],
+      outputs: [
+        'Desbloqueia Anotações de Dorothea Orem na Prancheta, soma 10/30 pacientes concluídos e registra a prescrição OREM-02.'
+      ]
+    },
+    {
+      id: 'ala_horta',
+      step: 4,
+      track: 'Trilha 2 • Alas Clínicas',
+      category: 'alas',
+      color: 'emerald',
+      badge: '10 Leitos • Leste',
+      title: '4. Ala Wanda Horta',
+      shortDesc: 'Enf. Emilly Gloria (móvel), Técnicos Fernanda e Diego, 10 leitos e prescrição.',
+      x: 365,
+      y: 345,
+      sectorRole: 'Enf. Emilly Gloria (circulando) • Técnicos de Enfermagem Fernanda e Diego (circulando)',
+      dialogues: [
+        'Enf. Emilly Gloria: Explica a Teoria das Necessidades Humanas Básicas (Psicobiológicas, Psicossociais e Psicoespirituais), as 6 etapas do Processo de Enfermagem, caso-exemplo de pneumonia em isolamento e referências bibliográficas.',
+        'Téc. Fernanda & Téc. Diego: Orientam balanço hídrico, controle térmico e mudança de posição para prevenção de lesão por pressão.'
+      ],
+      triggersIn: [
+        'Entrar pela porta Leste da Recepção Central.'
+      ],
+      playerActions: [
+        'Falar com Enf. Emilly Gloria para salvar automaticamente a teoria em Minhas Anotações.',
+        'Avaliar os 10 pacientes (HORTA-01 a HORTA-10), executar intervenções urgentes (incluindo solicitação de vaga na Unidade de Terapia Intensiva em risco de sepse) e assinar a prescrição no leito HORTA-04.'
+      ],
+      outputs: [
+        'Desbloqueia Anotações de Wanda Horta na Prancheta, soma +10 pacientes concluídos (20/30) e registra a prescrição HORTA-04.'
+      ]
+    },
+    {
+      id: 'uti',
+      step: 5,
+      track: 'Trilha 2 • Alas Clínicas',
+      category: 'alas',
+      color: 'rose',
+      badge: '10 Leitos • 4 em VMI',
+      title: '5. Unidade de Terapia Intensiva',
+      shortDesc: 'Enf. Kamila Magalhães (móvel), Técnicos Bruno e Larissa, 4 leitos intubados.',
+      x: 365,
+      y: 595,
+      sectorRole: 'Enf. Kamila Magalhães (circulando) • Técnicos de Enfermagem Bruno e Larissa (circulando)',
+      dialogues: [
+        'Enf. Kamila Magalhães: "Temos 10 leitos intensivos, sendo 4 em Ventilação Mecânica Invasiva (UTI-01, UTI-02, UTI-05 e UTI-08). Se houver instabilidade aguda, acione o médico de guarda imediatamente!"',
+        'Téc. Bruno & Téc. Larissa: Explicam vigilância de bombas de infusão de drogas vasoativas e higiene oral preventiva.'
+      ],
+      triggersIn: [
+        'Entrar pela porta Norte-Esquerda da Recepção Central.'
+      ],
+      playerActions: [
+        'Atender os 10 leitos intensivos (UTI-01 a UTI-10), acionando o médico de guarda imediatamente nos casos de choque/dessaturação.',
+        'Assinar a Prescrição de Enfermagem Intensiva no leito UTI-01.'
+      ],
+      outputs: [
+        'Completa os 30/30 pacientes do hospital e finaliza a prescrição intensiva UTI-01.'
+      ]
+    },
+
+    // TRILHA 3: SISTEMAS TRANSVERSAIS & MISSÕES
+    {
+      id: 'prancheta',
+      step: 6,
+      track: 'Trilha 3 • Missões & Prancheta',
+      category: 'missoes',
+      color: 'violet',
+      badge: 'Tecla P / Topo',
+      title: '6. Minha Prancheta',
+      shortDesc: 'Minhas Anotações (Orem e Horta), Censo dos 30 leitos e painel de missões.',
+      x: 710,
+      y: 115,
+      sectorRole: 'Ferramenta Transversal Acessível em Qualquer Setor (Tecla P ou Botão Superior)',
+      dialogues: [
+        'Aba 1 & 2 (Minhas Anotações): Permanecem bloqueadas até o diálogo com Enf. Camila Lins e Enf. Emilly Gloria; depois exibem teoria, caso-exemplo e fontes.',
+        'Aba 3 (Censo dos 30 Leitos): Lista em tempo real todos os pacientes sorteados, sinalizando concluídos (✅), pendentes (⏳) e alertas (🚨).'
+      ],
+      triggersIn: [
+        'Diálogos com Enf. Camila Lins e Enf. Emilly Gloria.',
+        'Conclusão de cada leito clínico nas enfermarias e na Unidade de Terapia Intensiva.'
+      ],
+      playerActions: [
+        'Consultar as anotações teóricas para responder aos estudos de caso e à Prova Final.',
+        'Conferir no Censo quais leitos ainda faltam para completar 30/30.'
+      ],
+      outputs: [
+        'Fornece o embasamento teórico e o rastreamento necessário para liberar a Coordenação.'
+      ]
+    },
+    {
+      id: 'missao_littmann',
+      step: 7,
+      track: 'Trilha 3 • Missões & Prancheta',
+      category: 'missoes',
+      color: 'violet',
+      badge: 'Conquista Extra',
+      title: '7. Missão Estetoscópio Littmann',
+      shortDesc: 'Aceitar com Dr. Victor Fontes, auscultar 3 leitos e equipar no pescoço.',
+      x: 710,
+      y: 365,
+      sectorRole: 'Dr. Victor Fontes + Qualquer 3 Leitos do Hospital-Escola',
+      dialogues: [
+        'Ao clicar em "Realizar Ausculta / Sinais Vitais" dentro de 3 leitos diferentes, o contador sobe de 0/3 até 3/3.',
+        'Ao retornar ao Dr. Victor Fontes com 3/3, ele entrega o Estetoscópio Littmann Classic III.'
+      ],
+      triggersIn: [
+        'Aceitar o desafio com Dr. Victor Fontes na Recepção.',
+        'Registrar ausculta/sinais vitais em 3 pacientes durante a ronda.'
+      ],
+      playerActions: [
+        'Completar as 3 auscultas à beira-leito e voltar à Recepção para falar com Dr. Victor Fontes.'
+      ],
+      outputs: [
+        'Desenha o Estetoscópio Littmann visivelmente no pescoço do personagem e registra a conquista no Certificado Oficial.'
+      ]
+    },
+    {
+      id: 'prescricoes',
+      step: 8,
+      track: 'Trilha 3 • Missões & Prancheta',
+      category: 'missoes',
+      color: 'violet',
+      badge: 'Conquista 3/3',
+      title: '8. Prescrições de Enfermagem',
+      shortDesc: 'Assinatura de 3 prescrições clínicas: OREM-02, HORTA-04 e UTI-01.',
+      x: 710,
+      y: 595,
+      sectorRole: 'Leitos Sinalizados com "✍️ PRESCR." (OREM-02, HORTA-04 e UTI-01)',
+      dialogues: [
+        'OREM-02: Prescrição focada em compensação parcial, apoio-educação para alta e sinais vitais.',
+        'HORTA-04: Prescrição estruturada nas Necessidades Humanas Básicas psicobiológicas e psicossociais.',
+        'UTI-01: Prescrição intensiva com cabeceira 30°-45°, higiene oral com clorexidina 0,12% e mudança de decúbito.'
+      ],
+      triggersIn: [
+        'Interagir com os leitos OREM-02, HORTA-04 e UTI-01.'
+      ],
+      playerActions: [
+        'Selecionar a conduta de enfermagem correta dentre alternativas embaralhadas.'
+      ],
+      outputs: [
+        'Atualiza o indicador "Prescrições: 3/3" no topo e inclui os leitos assinados no Certificado Oficial.'
+      ]
+    },
+
+    // TRILHA 4: CONVERGÊNCIA & CERTIFICAÇÃO FINAL
+    {
+      id: 'coordenacao',
+      step: 9,
+      track: 'Trilha 4 • Avaliação & Certificação',
+      category: 'avaliacao',
+      color: 'amber',
+      badge: 'Trava: 30/30 Leitos',
+      title: '9. Coordenação de Enfermagem',
+      shortDesc: 'Enf. Paloma Santos e Mural Equipe & Gerência (5 desenvolvedores).',
+      x: 1055,
+      y: 235,
+      sectorRole: 'Enf. Paloma Santos (Coordenadora) • Mural Lateral Equipe & Gerência',
+      dialogues: [
+        'Mural lateral exibe retratos e cargos: Victor Fontes (Gerente de Enfermagem), Paloma Santos (Coord. de Enfermagem e Preceptora de Estágios), Kamila Magalhães (Enf. Unidade de Terapia Intensiva), Camila Lins (Enf. Ala Dorothea Orem) e Emilly Gloria (Enf. Ala Wanda Horta).',
+        'Enf. Paloma Santos (se < 30 leitos): informa quantos pacientes ainda faltam no Censo.',
+        'Enf. Paloma Santos (com 30/30 leitos): libera imediatamente a Prova Final!'
+      ],
+      triggersIn: [
+        'Entrar pela porta Norte-Direita da Recepção.',
+        'Atingir 30/30 pacientes concluídos nas alas e na Unidade de Terapia Intensiva.'
+      ],
+      playerActions: [
+        'Falar com Enf. Paloma Santos após concluir todos os 30 leitos.'
+      ],
+      outputs: [
+        'Abre o formulário da Prova Final com 3 questões integradoras.'
+      ]
+    },
+    {
+      id: 'prova_final',
+      step: 10,
+      track: 'Trilha 4 • Avaliação & Certificação',
+      category: 'avaliacao',
+      color: 'amber',
+      badge: '3 Questões',
+      title: '10. Prova Final Integradora',
+      shortDesc: 'Arguição sobre classificação, foco central, metaparadigma e terapia intensiva.',
+      x: 1335,
+      y: 235,
+      sectorRole: 'Avaliação Final Aplicada pela Coordenadora Enf. Paloma Santos',
+      dialogues: [
+        'Questão 1: Classificação e foco central de Dorothea Orem (Déficit de Autocuidado) e Wanda Horta (Necessidades Humanas Básicas).',
+        'Questão 2: Diferenças no Metaparadigma da Enfermagem (Pessoa, Saúde, Ambiente e Enfermagem).',
+        'Questão 3: Aplicação integrada em paciente sedado sob Ventilação Mecânica Invasiva na Unidade de Terapia Intensiva.'
+      ],
+      triggersIn: [
+        'Desbloqueio pela Enf. Paloma Santos após 30/30 pacientes.'
+      ],
+      playerActions: [
+        'Marcar as 3 respostas corretas (alternativas embaralhadas a cada tentativa) e clicar em "Concluir e Emitir Certificado".'
+      ],
+      outputs: [
+        'Com 100% de acerto (3/3), dispara a emissão automática do Certificado Oficial.'
+      ]
+    },
+    {
+      id: 'certificado',
+      step: 11,
+      track: 'Trilha 4 • Avaliação & Certificação',
+      category: 'avaliacao',
+      color: 'amber',
+      badge: '100% Aprovado 🏆',
+      title: '11. Certificado Oficial',
+      shortDesc: 'Diploma personalizado com conquistas extras e assinaturas da Direção.',
+      x: 1195,
+      y: 515,
+      sectorRole: 'Direção do Hospital-Escola Dorothea Orem e Wanda Horta',
+      dialogues: [
+        'Declara que o(a) estudante personalizado(a) concluiu com êxito o minigame Hospital-Escola Dorothea Orem e Wanda Horta e foi aprovado(a) na prova final.',
+        'Lista as Conquistas Extras: Prescrições Assinadas (0/3 a 3/3) e Conquista do Estetoscópio Littmann.'
+      ],
+      triggersIn: [
+        'Aprovação integral na Prova Final com Enf. Paloma Santos.'
+      ],
+      playerActions: [
+        'Visualizar, apresentar no seminário ou clicar em "Continuar no Hospital" / pressionar ESC para novo plantão.'
+      ],
+      outputs: [
+        'Assinado pela Direção: Victor Fontes • Paloma Santos • Kamila Magalhães • Camila Lins • Emilly Gloria.'
+      ]
+    }
+  ];
+
+  // =========================================================================
+  // 2. CONEXÕES (ARESTAS CURVAS BÉZIER ENTRE OS NÓS)
+  // =========================================================================
+  const EDGES = [
+    // Trilha 1 -> Hub
+    { id: 'e1', from: 'tela_inicial', to: 'recepcao', label: 'Entrar', color: '#38bdf8', fromSide: 'bottom', toSide: 'top' },
+
+    // Recepção -> 3 Alas Clínicas
+    { id: 'e2', from: 'recepcao', to: 'ala_orem', label: 'Porta Oeste', color: '#10b981', fromSide: 'right', toSide: 'left' },
+    { id: 'e3', from: 'recepcao', to: 'ala_horta', label: 'Porta Leste', color: '#10b981', fromSide: 'right', toSide: 'left' },
+    { id: 'e4', from: 'recepcao', to: 'uti', label: 'Porta Norte-Esq', color: '#f43f5e', fromSide: 'right', toSide: 'left' },
+
+    // Recepção -> Missão Littmann & Coordenação
+    { id: 'e5', from: 'recepcao', to: 'missao_littmann', label: 'Dr. Victor', color: '#a78bfa', fromSide: 'right', toSide: 'left', dashed: true },
+
+    // Alas -> Minha Prancheta & Prescrições
+    { id: 'e6', from: 'ala_orem', to: 'prancheta', label: 'Salva Notas', color: '#a78bfa', fromSide: 'right', toSide: 'left' },
+    { id: 'e7', from: 'ala_horta', to: 'prancheta', label: 'Salva Notas', color: '#a78bfa', fromSide: 'right', toSide: 'left' },
+    { id: 'e8', from: 'ala_orem', to: 'prescricoes', label: 'OREM-02', color: '#a78bfa', fromSide: 'right', toSide: 'left', dashed: true },
+    { id: 'e9', from: 'ala_horta', to: 'prescricoes', label: 'HORTA-04', color: '#a78bfa', fromSide: 'right', toSide: 'left', dashed: true },
+    { id: 'e10', from: 'uti', to: 'prescricoes', label: 'UTI-01', color: '#a78bfa', fromSide: 'right', toSide: 'left' },
+
+    // Alas & Missões -> Coordenação (30/30)
+    { id: 'e11', from: 'prancheta', to: 'coordenacao', label: 'Censo 30/30', color: '#f59e0b', fromSide: 'right', toSide: 'left' },
+    { id: 'e12', from: 'missao_littmann', to: 'coordenacao', label: 'Equipado', color: '#a78bfa', fromSide: 'right', toSide: 'left', dashed: true },
+    { id: 'e13', from: 'prescricoes', to: 'coordenacao', label: '3/3 Assinadas', color: '#a78bfa', fromSide: 'right', toSide: 'left', dashed: true },
+
+    // Fluxo Final: Coordenação -> Prova Final -> Certificado
+    { id: 'e14', from: 'coordenacao', to: 'prova_final', label: 'Libera Prova', color: '#f59e0b', fromSide: 'right', toSide: 'left' },
+    { id: 'e15', from: 'prova_final', to: 'certificado', label: 'Aprovado 3/3', color: '#f59e0b', fromSide: 'bottom', toSide: 'top' }
+  ];
+
+  // =========================================================================
+  // 3. ESTADO DA INTERFACE (SELEÇÃO, FILTRO, ZOOM & PAN)
+  // =========================================================================
+  let selectedNodeId = 'tela_inicial';
+  let activeFilter = 'all';
+  let scale = 0.85;
+  let panX = 24;
+  let panY = 58;
+  let isDragging = false;
+  let startDragX = 0;
+  let startDragY = 0;
+
+  const NODE_W = 255;
+  const NODE_H = 148;
+
+  const colorMap = {
+    cyan: { border: 'node-cyan', text: 'text-sky-400', badge: 'bg-sky-500/20 text-sky-300 border-sky-400/30' },
+    emerald: { border: 'node-emerald', text: 'text-emerald-400', badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30' },
+    rose: { border: 'node-rose', text: 'text-rose-400', badge: 'bg-rose-500/20 text-rose-300 border-rose-400/30' },
+    violet: { border: 'node-violet', text: 'text-violet-400', badge: 'bg-violet-500/20 text-violet-300 border-violet-400/30' },
+    amber: { border: 'node-amber', text: 'text-amber-400', badge: 'bg-amber-500/20 text-amber-300 border-amber-400/30' }
+  };
+
+  // =========================================================================
+  // 4. RENDERIZAÇÃO DOS NÓS E LINHAS CURVAS SVG
+  // =========================================================================
+  function getAnchorPoint(node, side) {
+    if (side === 'top') return { x: node.x + NODE_W / 2, y: node.y };
+    if (side === 'bottom') return { x: node.x + NODE_W / 2, y: node.y + NODE_H };
+    if (side === 'left') return { x: node.x, y: node.y + NODE_H / 2 };
+    return { x: node.x + NODE_W, y: node.y + NODE_H / 2 }; // right
+  }
+
+  function renderDiagram() {
+    const nodesLayer = document.getElementById('nodesLayer');
+    const edgesSvg = document.getElementById('edgesSvg');
+
+    // Renderizar Nós
+    nodesLayer.innerHTML = NODES.map(n => {
+      const c = colorMap[n.color];
+      const isSelected = n.id === selectedNodeId;
+      const isDimmed = activeFilter !== 'all' && n.category !== activeFilter;
+
+      return `
+        <div
+          id="node_${n.id}"
+          onclick="selectNode('${n.id}')"
+          style="left: ${n.x}px; top: ${n.y}px; height: ${NODE_H}px;"
+          class="flow-node ${c.border} ${isSelected ? 'selected' : ''} ${isDimmed ? 'dimmed' : ''} flex flex-col justify-between"
+        >
+          <div>
+            <div class="flex items-center justify-between gap-1.5 mb-1.5">
+              <span class="text-[10px] font-black uppercase tracking-wider ${c.text}">
+                Etapa ${n.step}
+              </span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-md border ${c.badge}">
+                ${n.badge}
+              </span>
+            </div>
+            <h3 class="text-sm font-extrabold text-white leading-tight">
+              ${n.title}
+            </h3>
+            <p class="text-[11.5px] text-slate-300 mt-1.5 leading-snug line-clamp-3">
+              ${n.shortDesc}
+            </p>
+          </div>
+          <div class="flex items-center justify-between pt-1.5 border-t border-slate-800/90 text-[10px] font-bold text-slate-400">
+            <span>Clique para inspecionar</span>
+            <span class="${c.text}">Detalhes →</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // Renderizar Defs (Setas) e Caminhos Curvos Bézier
+    const uniqueColors = ['#38bdf8', '#10b981', '#f43f5e', '#a78bfa', '#f59e0b'];
+    const defsHtml = `
+      <defs>
+        ${uniqueColors.map(hex => {
+          const safeId = hex.replace('#', '');
+          return `
+            <marker id="arrow_${safeId}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+              <path d="M 0 1.5 L 9 5 L 0 8.5 z" fill="${hex}" />
+            </marker>
+          `;
+        }).join('')}
+      </defs>
+    `;
+
+    const pathsHtml = EDGES.map(edge => {
+      const fromNode = NODES.find(n => n.id === edge.from);
+      const toNode = NODES.find(n => n.id === edge.to);
+      if (!fromNode || !toNode) return '';
+
+      const p1 = getAnchorPoint(fromNode, edge.fromSide);
+      const p2 = getAnchorPoint(toNode, edge.toSide);
+
+      let d = '';
+      if (edge.fromSide === 'bottom' && edge.toSide === 'top') {
+        const midY = (p1.y + p2.y) / 2;
+        d = `M ${p1.x} ${p1.y} C ${p1.x} ${midY}, ${p2.x} ${midY}, ${p2.x} ${p2.y}`;
+      } else {
+        const dx = Math.max(55, Math.abs(p2.x - p1.x) * 0.48);
+        d = `M ${p1.x} ${p1.y} C ${p1.x + dx} ${p1.y}, ${p2.x - dx} ${p2.y}, ${p2.x} ${p2.y}`;
+      }
+
+      const isConnected = edge.from === selectedNodeId || edge.to === selectedNodeId;
+      const isFilteredOut = activeFilter !== 'all' &&
+        fromNode.category !== activeFilter &&
+        toNode.category !== activeFilter;
+
+      const safeMarker = edge.color.replace('#', '');
+      const midX = (p1.x + p2.x) / 2;
+      const midY = (p1.y + p2.y) / 2;
+
+      return `
+        <g class="${isFilteredOut ? 'edge-dimmed' : ''}" style="transition: opacity 0.25s ease;">
+          <path
+            d="${d}"
+            fill="none"
+            stroke="${edge.color}"
+            stroke-width="${isConnected ? '3' : '2'}"
+            stroke-opacity="${isConnected ? '1' : '0.68'}"
+            marker-end="url(#arrow_${safeMarker})"
+            class="${isConnected ? 'edge-flow edge-active' : (edge.dashed ? 'edge-flow' : '')}"
+            style="color: ${edge.color};"
+          />
+          <rect
+            x="${midX - 42}"
+            y="${midY - 9}"
+            width="84"
+            height="17"
+            rx="5"
+            fill="#090e1a"
+            stroke="${edge.color}"
+            stroke-opacity="${isConnected ? '0.9' : '0.45'}"
+            stroke-width="1"
+          />
+          <text
+            x="${midX}"
+            y="${midY + 3}"
+            text-anchor="middle"
+            fill="#e2e8f0"
+            font-size="9.5"
+            font-weight="700"
+          >
+            ${edge.label}
+          </text>
+        </g>
+      `;
+    }).join('');
+
+    edgesSvg.innerHTML = defsHtml + pathsHtml;
+  }
+
+  // =========================================================================
+  // 5. PAINEL INSPETOR DETALHADO AO CLICAR NO NÓ
+  // =========================================================================
+  function selectNode(id, centerOnMobile = false) {
+    selectedNodeId = id;
+    const node = NODES.find(n => n.id === id);
+    if (!node) return;
+
+    const c = colorMap[node.color];
+    document.getElementById('inspCategory').className = `text-[10px] font-black uppercase tracking-widest ${c.text}`;
+    document.getElementById('inspCategory').textContent = node.track;
+    document.getElementById('inspTitle').textContent = node.title;
+    document.getElementById('inspBadge').className = `px-2.5 py-1 rounded-lg text-[11px] font-extrabold border shrink-0 ${c.badge}`;
+    document.getElementById('inspBadge').textContent = node.badge;
+
+    document.getElementById('stepCounter').textContent = `Etapa ${node.step}/${NODES.length}`;
+
+    // Conexões de entrada e saída deste nó
+    const incoming = EDGES.filter(e => e.to === id).map(e => NODES.find(n => n.id === e.from)?.title).filter(Boolean);
+    const outgoing = EDGES.filter(e => e.from === id).map(e => NODES.find(n => n.id === e.to)?.title).filter(Boolean);
+
+    document.getElementById('inspBody').innerHTML = `
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3">
+        <div class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">
+          Setor &amp; Personagens Envolvidos
+        </div>
+        <div class="font-bold text-slate-100">${node.sectorRole}</div>
+      </div>
+
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3 space-y-1.5">
+        <div class="text-[10px] font-extrabold uppercase tracking-wider text-sky-400">
+          💬 Diálogos &amp; Conteúdo Pedagógico
+        </div>
+        <ul class="space-y-1.5 text-slate-300">
+          ${node.dialogues.map(d => `<li class="pl-3 border-l-2 border-sky-500/50">${d}</li>`).join('')}
+        </ul>
+      </div>
+
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3 space-y-1.5">
+        <div class="text-[10px] font-extrabold uppercase tracking-wider text-emerald-400">
+          ⚡ Gatilhos de Entrada (Como chega aqui)
+        </div>
+        <ul class="space-y-1 text-slate-300">
+          ${node.triggersIn.map(t => `<li>• ${t}</li>`).join('')}
+        </ul>
+        ${incoming.length ? `
+          <div class="pt-1.5 flex flex-wrap gap-1">
+            ${incoming.map(name => `<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-950 border border-slate-700 text-slate-300">← ${name}</span>`).join('')}
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3 space-y-1.5">
+        <div class="text-[10px] font-extrabold uppercase tracking-wider text-amber-400">
+          🎮 Ações do Jogador no Setor
+        </div>
+        <ul class="space-y-1 text-slate-300">
+          ${node.playerActions.map(a => `<li>• ${a}</li>`).join('')}
+        </ul>
+      </div>
+
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-3 space-y-1.5">
+        <div class="text-[10px] font-extrabold uppercase tracking-wider text-violet-400">
+          🔗 Saídas &amp; Próximas Conexões
+        </div>
+        <ul class="space-y-1 text-slate-300">
+          ${node.outputs.map(o => `<li>• ${o}</li>`).join('')}
+        </ul>
+        ${outgoing.length ? `
+          <div class="pt-1.5 flex flex-wrap gap-1">
+            ${outgoing.map(name => `<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-950 border border-violet-500/40 text-violet-200">→ ${name}</span>`).join('')}
+          </div>
+        ` : ''}
+      </div>
+    `;
+
+    renderDiagram();
+
+    if (centerOnMobile) {
+      focusOnNode(node);
+    }
+  }
+
+  // =========================================================================
+  // 6. SIMULAÇÃO PASSO A PASSO & FILTROS POR CATEGORIA
+  // =========================================================================
+  function stepJourney(delta) {
+    const current = NODES.find(n => n.id === selectedNodeId) || NODES[0];
+    let nextStep = current.step + delta;
+    if (nextStep < 1) nextStep = NODES.length;
+    if (nextStep > NODES.length) nextStep = 1;
+
+    const nextNode = NODES.find(n => n.step === nextStep);
+    if (nextNode) {
+      if (activeFilter !== 'all' && nextNode.category !== activeFilter) {
+        setFilter('all');
+      }
+      selectNode(nextNode.id, true);
+    }
+  }
+
+  function setFilter(cat) {
+    activeFilter = cat;
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      const isMatch = btn.dataset.filter === cat;
+      btn.className = isMatch
+        ? 'filter-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-sky-500 text-slate-950 transition whitespace-nowrap'
+        : 'filter-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 transition whitespace-nowrap';
+    });
+    renderDiagram();
+  }
+
+  // =========================================================================
+  // 7. CONTROLES DE ZOOM, AJUSTE À TELA E PAN (ARRASTAR CANVAS)
+  // =========================================================================
+  const viewport = document.getElementById('viewport');
+  const stage = document.getElementById('stage');
+
+  function applyTransform() {
+    stage.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+    document.getElementById('zoomLabel').textContent = `${Math.round(scale * 100)}%`;
+  }
+
+  function changeZoom(delta) {
+    scale = Math.max(0.4, Math.min(1.5, scale + delta));
+    applyTransform();
+  }
+
+  function fitToScreen() {
+    const rect = viewport.getBoundingClientRect();
+    const stageW = 1620;
+    const stageH = 800;
+    const scaleX = (rect.width - 32) / stageW;
+    const scaleY = (rect.height - 84) / stageH;
+    scale = Math.max(0.42, Math.min(1.05, Math.min(scaleX, scaleY)));
+    panX = Math.max(12, (rect.width - stageW * scale) / 2);
+    panY = Math.max(46, (rect.height - stageH * scale) / 2 + 14);
+    applyTransform();
+  }
+
+  function focusOnNode(node) {
+    const rect = viewport.getBoundingClientRect();
+    const targetX = rect.width / 2 - (node.x + NODE_W / 2) * scale;
+    const targetY = rect.height / 2 - (node.y + NODE_H / 2) * scale;
+    panX = targetX;
+    panY = targetY;
+    applyTransform();
+  }
+
+  // Arrastar com mouse
+  viewport.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.flow-node') || e.target.closest('button')) return;
+    isDragging = true;
+    startDragX = e.clientX - panX;
+    startDragY = e.clientY - panY;
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isDragging) return;
+    panX = e.clientX - startDragX;
+    panY = e.clientY - startDragY;
+    applyTransform();
+  });
+
+  window.addEventListener('mouseup', () => {
+    isDragging = false;
+  });
+
+  // Zoom com roda do mouse
+  viewport.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.08 : -0.08;
+    changeZoom(delta);
+  }, { passive: false });
+
+  // Arrastar com toque (Mobile / Tablet)
+  viewport.addEventListener('touchstart', (e) => {
+    if (e.target.closest('.flow-node') || e.target.closest('button')) return;
+    if (e.touches.length === 1) {
+      isDragging = true;
+      startDragX = e.touches[0].clientX - panX;
+      startDragY = e.touches[0].clientY - panY;
+    }
+  }, { passive: true });
+
+  viewport.addEventListener('touchmove', (e) => {
+    if (!isDragging || e.touches.length !== 1) return;
+    panX = e.touches[0].clientX - startDragX;
+    panY = e.touches[0].clientY - startDragY;
+    applyTransform();
+  }, { passive: true });
+
+  viewport.addEventListener('touchend', () => {
+    isDragging = false;
+  });
+
+  window.addEventListener('resize', fitToScreen);
+
+  // Inicialização
+  window.onload = function () {
+    selectNode('tela_inicial', false);
+    fitToScreen();
+  };
+</script>
+</body>
+</html>
